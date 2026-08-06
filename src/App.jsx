@@ -7,7 +7,15 @@ const LS_SESSIONS = "fe_sessions";
 const store = {
   saveIds(ids){ try{ localStorage.setItem(LS_USED, JSON.stringify(ids)); }catch(e){} },
   loadIds(){ try{ const v=localStorage.getItem(LS_USED); return v?JSON.parse(v):[]; }catch(e){ return []; } },
-  saveSessions(sessions){ try{ localStorage.setItem(LS_SESSIONS, JSON.stringify(sessions)); }catch(e){} },
+  addSession(session){
+    try{
+      const sessions = this.loadSessions();
+      sessions.push(session);
+      // 最新100件だけ保持
+      if(sessions.length > 100) sessions.splice(0, sessions.length - 100);
+      localStorage.setItem(LS_SESSIONS, JSON.stringify(sessions));
+    }catch(e){}
+  },
   loadSessions(){ try{ const v=localStorage.getItem(LS_SESSIONS); return v?JSON.parse(v):[]; }catch(e){ return []; } },
 };
 
@@ -161,6 +169,7 @@ export default function App(){
   const [showFb, setShowFb] = useState(false);
   const [analysis, setAnalysis] = useState("");
   const [allHistory, setAllHistory] = useState([]);
+  const [savedSessions, setSavedSessions] = useState([]);
   const [missedList, setMissedList] = useState([]);
   const [catStats, setCatStats] = useState({});
   const [copyText, setCopyText] = useState("");
@@ -168,13 +177,16 @@ export default function App(){
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState("");
 
-  // 起動時にlocalStorageから進捗を復元
+  // 起動時にlocalStorageから進捗・履歴を復元
   useEffect(()=>{
     const ids = store.loadIds().filter(id => ALL_QUESTIONS.some(q=>q.id===id));
     if(ids.length > 0){
       setUsedIds(ids);
       setProgressError(`✓ ${ids.length}問分の進捗を復元`);
     }
+    // 過去のセッション履歴を復元
+    const saved = store.loadSessions();
+    if(saved.length > 0) setSavedSessions(saved);
     setProgressLoading(false);
   },[]); // eslint-disable-line
 
