@@ -290,7 +290,7 @@ export default function App(){
       <div style={s.container}>
         <header style={s.header}>
           <div style={s.h1}>FE 科目A Quiz</div>
-          <div style={s.sub}>基本情報技術者 — 93問（随時追加）</div>
+          <div style={s.sub}>基本情報技術者 — 174問内蔵</div>
         </header>
 
         <div style={s.tabs}>
@@ -306,7 +306,7 @@ export default function App(){
             <div style={s.card}>
               {progressLoading ? (
                 <div style={{textAlign:"center",padding:20,color:C.muted,fontSize:13}}>
-                  <span style={s.spinner}/> <span style={{marginLeft:8}}>進捗をSupabaseから読み込み中…</span>
+                  <span style={s.spinner}/> <span style={{marginLeft:8}}>進捗を読み込み中…</span>
                 </div>
               ) : (
                 <div style={{marginBottom:12,fontSize:13,color:C.muted}}>
@@ -324,29 +324,6 @@ export default function App(){
               <button style={{...s.btn(),width:"100%"}} onClick={startSession}>
                 {weakMode ? "🎯 苦手優先モードでスタート" : "スタート（10問）"}
               </button>
-              {/* localStorage確認ボタン */}
-              <button style={{width:"100%",padding:8,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:11,cursor:"pointer",marginTop:6}}
-                onClick={()=>{
-                  try{
-                    localStorage.setItem("fe_test","1");
-                    const r = localStorage.getItem("fe_test");
-                    localStorage.removeItem("fe_test");
-                    if(r==="1"){
-                      const v = localStorage.getItem('fe_used_ids');
-                      if(v){
-                        alert(`✓ localStorage動作中\n保存済みID数: ${JSON.parse(v).length}問`);
-                      } else {
-                        alert("✓ localStorage書き込みOK\nただしfe_used_idsはまだ保存されていない");
-                      }
-                    } else {
-                      alert("✗ localStorage書き込み後に読めない");
-                    }
-                  }catch(e){
-                    alert("✗ localStorageエラー: " + e.name + "\n" + e.message);
-                  }
-                }}>
-                🔍 localStorage確認
-              </button>
               {/* 苦手優先モード切替 */}
               <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",background:weakMode?"rgba(63,185,80,.08)":"rgba(255,255,255,.03)",border:`1px solid ${weakMode?C.green:C.border}`,borderRadius:8,cursor:"pointer"}}
                 onClick={async()=>{
@@ -363,12 +340,12 @@ export default function App(){
                 </div>
                 <div>
                   <div style={{fontSize:13,color:weakMode?C.green:C.muted,fontWeight:weakMode?700:400}}>苦手優先モード</div>
-                  <div style={{fontSize:11,color:C.muted}}>{weakMode && weakIds.length>0 ? `Supabaseの${weakIds.length}問を優先出題` : "Supabaseの間違えた問題を優先"}</div>
+                  <div style={{fontSize:11,color:C.muted}}>{weakMode && weakIds.length>0 ? `${weakIds.length}問を優先出題` : "復習リストの問題を優先"}</div>
                 </div>
               </div>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
                 onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。よろしいですか？")){ saveUsedIds([]); } }}>
-                🔄 問題をリセット（全93問に戻す）
+                🔄 問題をリセット（全174問に戻す）
               </button>
             </div>
           )}
@@ -527,30 +504,7 @@ export default function App(){
                 ))
               }
             </>}
-
-            
-
-            {/* Supabase復習リスト */}
-            <div style={{...s.sectionTitle,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>📝 Supabase復習リスト（{dbMissed.length}問）</span>
-              {dbMissed.length>0 && <button style={{...s.copyBtn(false),fontSize:11,padding:"4px 10px",color:C.red,borderColor:C.red}} onClick={clearDbMissed}>クリア</button>}
-            </div>
-            {dbMissed.length===0 ? (
-              <div style={{color:C.muted,fontSize:13,textAlign:"center",padding:"12px 0"}}>間違えた問題はまだありません</div>
-            ) : (
-              dbMissed.slice(0,20).map((m,i)=>(
-                <div key={i} style={s.reviewItem}>
-                  <div style={{fontSize:11,color:C.muted,fontFamily:"monospace",marginBottom:4}}>{m.cat} / {m.topic}</div>
-                  <div style={{fontSize:13,fontWeight:500,lineHeight:1.6,marginBottom:6}}>{m.q}</div>
-                  <div style={s.hintLabel}>正解: {m.correct_label}</div>
-                  <div style={{fontSize:12,color:C.muted,lineHeight:1.6,marginTop:4}}>{m.hint}</div>
-                </div>
-              ))
-            )}
-
-            {totalAnswered===0 && dbHistory.length===0 && <div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"12px 0"}}>クイズに挑戦すると履歴が表示されます。</div>}
-          </div>
-        )}
+          )}
       </div>
     </div>
   );
