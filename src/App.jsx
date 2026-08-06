@@ -371,6 +371,19 @@ export default function App(){
               <button style={{...s.btn(),width:"100%"}} onClick={startSession}>
                 {weakMode ? "🎯 苦手優先モードでスタート" : "スタート（10問）"}
               </button>
+              {/* localStorage確認ボタン */}
+              <button style={{width:"100%",padding:8,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:11,cursor:"pointer",marginTop:6}}
+                onClick={()=>{
+                  const v = localStorage.getItem('fe_used_ids');
+                  if(v){
+                    const ids = JSON.parse(v);
+                    alert(`✓ localStorage動作中\n保存済みID数: ${ids.length}問`);
+                  } else {
+                    alert('✗ localStorageに保存なし（毎回リセットされている）');
+                  }
+                }}>
+                🔍 localStorage確認
+              </button>
               {/* 苦手優先モード切替 */}
               <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",background:weakMode?"rgba(63,185,80,.08)":"rgba(255,255,255,.03)",border:`1px solid ${weakMode?C.green:C.border}`,borderRadius:8,cursor:"pointer"}}
                 onClick={async()=>{
