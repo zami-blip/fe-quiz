@@ -1,50 +1,15 @@
 import React, { useState, useCallback, useEffect } from "react";
 
-const GAS_URL = "https://script.google.com/macros/s/AKfycbw1-3SNT86OTpdm5h5WefvGMbXW1hV_37PEsE49SNEj7SIBFZ-kEPkCXZm3smmPe25P/exec";
+// localStorage管理
+const LS_USED = "fe_used_ids";
+const LS_SESSIONS = "fe_sessions";
 
-const gas = {
-  async post(data){
-    try{
-      const res = await fetch(GAS_URL, {
-        method:"POST",
-        body: JSON.stringify(data),
-      });
-      return res.ok ? await res.json() : {ok:false};
-    }catch(e){ return {ok:false, error:String(e)}; }
-  },
-  async get(params){
-    try{
-      const qs = Object.entries(params).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join("&");
-      const res = await fetch(`${GAS_URL}?${qs}`);
-      return res.ok ? await res.json() : {ok:false};
-    }catch(e){ return {ok:false, error:String(e)}; }
-  },
-};
-const LS_KEY = "fe_used_ids";
 const store = {
-  saveIds(ids){
-    try{
-      const str = JSON.stringify(ids);
-      localStorage.setItem(LS_KEY, str);
-      console.log("localStorage saved:", ids.length, "ids");
-    }catch(e){
-      console.error("localStorage setItem error:", e.name, e.message);
-      alert("保存エラー: " + e.name + " - " + e.message);
-    }
-    gas.post({type:"progress", usedIds:ids});
-  },
-  loadIds(){
-    try{
-      const v = localStorage.getItem(LS_KEY);
-      console.log("localStorage loaded:", v ? JSON.parse(v).length : 0, "ids");
-      return v ? JSON.parse(v) : [];
-    }catch(e){
-      console.error("localStorage getItem error:", e);
-      return [];
-    }
-  },
+  saveIds(ids){ try{ localStorage.setItem(LS_USED, JSON.stringify(ids)); }catch(e){} },
+  loadIds(){ try{ const v=localStorage.getItem(LS_USED); return v?JSON.parse(v):[]; }catch(e){ return []; } },
+  saveSessions(sessions){ try{ localStorage.setItem(LS_SESSIONS, JSON.stringify(sessions)); }catch(e){} },
+  loadSessions(){ try{ const v=localStorage.getItem(LS_SESSIONS); return v?JSON.parse(v):[]; }catch(e){ return []; } },
 };
-
 
 const CATS = [
   "すべて","基礎理論","コンピュータシステム","ネットワーク","情報セキュリティ",
@@ -109,10 +74,10 @@ function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){const j=M
 
 async function callClaude(messages, system){
   const apiKey = process.env.REACT_APP_ANTHROPIC_KEY || "";
-  const h = {"Content-Type":"application/json"};
-  if(apiKey) h["x-api-key"] = apiKey;
+  const headers = {"Content-Type":"application/json"};
+  if(apiKey) headers["x-api-key"] = apiKey;
   const res = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers:h,
+    method:"POST", headers,
     body:JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000, system, messages }),
   });
   const data = await res.json();
@@ -200,32 +165,17 @@ export default function App(){
   const [catStats, setCatStats] = useState({});
   const [copyText, setCopyText] = useState("");
   const [copied, setCopied] = useState(false);
-  const [dbSaving, setDbSaving] = useState(false);
-  const [dbSaved, setDbSaved] = useState(false);
-  const [dbHistory, setDbHistory] = useState([]);
-  const [dbMissed, setDbMissed] = useState([]);
-  const [dbLoading, setDbLoading] = useState(false);
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState("");
 
   // 起動時にlocalStorageから進捗を復元
   useEffect(()=>{
-    const local = store.loadIds();
-    const valid = local.filter(id => ALL_QUESTIONS.some(q=>q.id===id));
-    if(valid.length > 0){
-      setUsedIds(valid);
-      setProgressError(`✓ ${valid.length}問分の進捗を復元`);
-      setProgressLoading(false);
-    } else {
-      gas.get({type:"progress"}).then(res=>{
-        if(res.ok && res.usedIds && res.usedIds.length > 0){
-          const v = res.usedIds.filter(id => ALL_QUESTIONS.some(q=>q.id===id));
-          setUsedIds(v); store.saveIds(v);
-          setProgressError(`✓ ${v.length}問分の進捗を復元`);
-        }
-        setProgressLoading(false);
-      }).catch(()=>{ setProgressLoading(false); });
+    const ids = store.loadIds().filter(id => ALL_QUESTIONS.some(q=>q.id===id));
+    if(ids.length > 0){
+      setUsedIds(ids);
+      setProgressError(`✓ ${ids.length}問分の進捗を復元`);
     }
+    setProgressLoading(false);
   },[]); // eslint-disable-line
 
   // 残り問題数
@@ -288,23 +238,6 @@ export default function App(){
 
   const sessionCorrect = answers.filter((a,i)=>a!==null&&questions[i]&&a===questions[i].correct).length;
 
-  // セッション終了時にGASへ保存
-  const saveToDb = useCallback(async(qs, ans)=>{
-    setDbSaving(true); setDbSaved(false);
-    try{
-      const correct = ans.filter((a,i)=>a!==null&&qs[i]&&a===qs[i].correct).length;
-      await gas.post({
-        type:"session", cat, correct, total:qs.length,
-        answers: ans.map((a,i)=>({topic:qs[i]?.topic, ok:a===qs[i]?.correct})),
-      });
-      const wrong = qs.filter((_,i)=>ans[i]!==null&&ans[i]!==qs[i]?.correct);
-      for(const q of wrong){
-        await gas.post({type:"missed", question:{id:q.id,cat:q.cat,topic:q.topic,q:q.q,correct:q.correct,hint:q.hint}});
-      }
-      setDbSaved(true);
-    }catch(e){ console.error(e); }
-    finally{ setDbSaving(false); }
-  },[cat]);
 
   useEffect(()=>{
     if(phase==="score"&&questions.length>0){
@@ -324,24 +257,10 @@ export default function App(){
         ];
         setCopyText(lines.join("\n"));
       }
-      // Supabaseに自動保存
-      saveToDb(questions, answers, catStats);
     }
   },[phase]); // eslint-disable-line
 
-  // 履歴タブを開いたときにGASからデータ取得
-  const loadDbHistory = useCallback(async()=>{
-    setDbLoading(true);
-    try{
-      const [statsRes, missedRes] = await Promise.all([
-        gas.get({type:"stats"}),
-        gas.get({type:"missed"}),
-      ]);
-      setDbHistory(statsRes.sessions||[]);
-      setDbMissed(missedRes.missed||[]);
-    }catch(e){console.error(e);}
-    finally{setDbLoading(false);}
-  },[]);
+  const loadDbHistory = useCallback(()=>{ /* localStorage版は履歴タブで直接表示 */ },[]);
 
   const clearDbMissed = useCallback(async()=>{
     if(!window.confirm("GASの復習リストを全削除しますか？\n（スプレッドシートのmissedシートを手動で削除してください）")) return;
@@ -434,8 +353,8 @@ export default function App(){
                   const next = !weakMode;
                   setWeakMode(next);
                   if(next){
-                    const res = await gas.get({type:"missed"}).catch(()=>({ok:false}));
-                    const ids = (res.missed||[]).map(m=>m.id).filter(Boolean);
+                    // localStorageの復習リストから苦手IDを取得
+                    const ids = missedList.map(q=>q.id);
                     setWeakIds([...new Set(ids)]);
                   }
                 }}>
@@ -527,10 +446,6 @@ export default function App(){
                 <button style={s.btn()} onClick={startSession}>もう一度</button>
                 <button style={s.btn(C.accent,true)} onClick={resetSession}>設定に戻る</button>
               </div>
-              {/* DB保存状態 */}
-              <div style={{fontSize:12,color:dbSaved?C.green:dbSaving?C.warn:C.muted,marginBottom:12,textAlign:"center"}}>
-                {dbSaving?"💾 Supabaseに保存中…":dbSaved?"✓ Supabaseに保存しました":""}
-              </div>
               <div style={{textAlign:"left"}}>
                 <div style={s.sectionTitle}>AI 学習分析</div>
                 {analysis?(
@@ -613,35 +528,7 @@ export default function App(){
               }
             </>}
 
-            {/* ── Supabase永続履歴 ── */}
-            <div style={{...s.sectionTitle,marginTop:28,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>📦 Supabase保存済み履歴</span>
-              <button style={{...s.copyBtn(false),fontSize:11,padding:"4px 10px"}} onClick={loadDbHistory}>
-                {dbLoading?"読込中…":"更新"}
-              </button>
-            </div>
-
-            {dbLoading ? (
-              <div style={{textAlign:"center",padding:20}}><span style={s.spinner}/></div>
-            ) : dbHistory.length===0 ? (
-              <div style={{color:C.muted,fontSize:13,textAlign:"center",padding:20}}>まだ保存された履歴がありません</div>
-            ) : (
-              <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 13px",marginBottom:16}}>
-                {dbHistory.map((h,i)=>{
-                  const d=new Date(h.created_at);
-                  const ds=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-                  const pct=Math.round(h.correct/h.total*100);
-                  return(
-                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:i<dbHistory.length-1?`1px solid ${C.border}`:"none"}}>
-                      <div>
-                        <div style={{fontSize:12,color:C.muted,fontFamily:"monospace"}}>{ds} ・ {h.cat}</div>
-                      </div>
-                      <div style={{fontFamily:"monospace",fontSize:13,fontWeight:600,color:rateColor(pct),flexShrink:0}}>{h.correct}/{h.total}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            
 
             {/* Supabase復習リスト */}
             <div style={{...s.sectionTitle,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
