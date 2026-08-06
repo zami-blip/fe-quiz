@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 
 const GAS_URL = "https://script.google.com/macros/s/AKfycbw1-3SNT86OTpdm5h5WefvGMbXW1hV_37PEsE49SNEj7SIBFZ-kEPkCXZm3smmPe25P/exec";
 
@@ -20,6 +20,22 @@ const gas = {
     }catch(e){ return {ok:false, error:String(e)}; }
   },
 };
+const LS_KEY = "fe_used_ids";
+const store = {
+  saveIds(ids){
+    try{
+      localStorage.setItem(LS_KEY, JSON.stringify(ids));
+    }catch(e){
+      console.error("localStorage error:", e);
+    }
+    gas.post({type:"progress", usedIds:ids});
+  },
+  loadIds(){
+    try{ const v=localStorage.getItem(LS_KEY); return v?JSON.parse(v):[]; }
+    catch(e){ return []; }
+  },
+};
+
 
 const CATS = [
   "すべて","基礎理論","コンピュータシステム","ネットワーク","情報セキュリティ",
@@ -83,8 +99,11 @@ function rateColor(p){ return p>=80?C.green:p>=50?C.warn:C.red; }
 function shuffle(arr){ const a=[...arr]; for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
 
 async function callClaude(messages, system){
+  const apiKey = process.env.REACT_APP_ANTHROPIC_KEY || "";
+  const h = {"Content-Type":"application/json"};
+  if(apiKey) h["x-api-key"] = apiKey;
   const res = await fetch("https://api.anthropic.com/v1/messages",{
-    method:"POST", headers:{"Content-Type":"application/json"},
+    method:"POST", headers:h,
     body:JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000, system, messages }),
   });
   const data = await res.json();
@@ -180,18 +199,24 @@ export default function App(){
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState("");
 
-  // 起動時にGASからusedIdsを復元
+  // 起動時にlocalStorageから進捗を復元
   useEffect(()=>{
-    gas.get({type:"progress"}).then(res=>{
-      if(res.ok){
-        const validIds = (res.usedIds||[]).filter(id => ALL_QUESTIONS.some(q=>q.id===id));
-        setUsedIds(validIds);
-        setProgressError(validIds.length > 0 ? `✓ ${validIds.length}問分の進捗を復元` : "");
-      } else {
-        setProgressError("");
-      }
+    const local = store.loadIds();
+    const valid = local.filter(id => ALL_QUESTIONS.some(q=>q.id===id));
+    if(valid.length > 0){
+      setUsedIds(valid);
+      setProgressError(`✓ ${valid.length}問分の進捗を復元`);
       setProgressLoading(false);
-    }).catch(()=>{ setProgressLoading(false); setProgressError(""); });
+    } else {
+      gas.get({type:"progress"}).then(res=>{
+        if(res.ok && res.usedIds && res.usedIds.length > 0){
+          const v = res.usedIds.filter(id => ALL_QUESTIONS.some(q=>q.id===id));
+          setUsedIds(v); store.saveIds(v);
+          setProgressError(`✓ ${v.length}問分の進捗を復元`);
+        }
+        setProgressLoading(false);
+      }).catch(()=>{ setProgressLoading(false); });
+    }
   },[]); // eslint-disable-line
 
   // 残り問題数
@@ -203,7 +228,7 @@ export default function App(){
 
   const saveUsedIds = useCallback((ids)=>{
     setUsedIds(ids);
-    gas.post({type:"progress", usedIds:ids});
+    store.saveIds(ids);
   },[]);
 
   const startSession = useCallback(async()=>{
