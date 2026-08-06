@@ -516,7 +516,67 @@ export default function App(){
                 ))
               }
             </>}
-          )}
+
+            {/* 保存済みセッション履歴 */}
+            {savedSessions.length > 0 && (()=>{
+              const totalA = savedSessions.reduce((s,x)=>s+x.total,0);
+              const totalC = savedSessions.reduce((s,x)=>s+x.correct,0);
+              const ovPct = totalA>0?Math.round(totalC/totalA*100):0;
+              const aggCats = {};
+              savedSessions.forEach(sess=>{
+                Object.entries(sess.cats||{}).forEach(([c,v])=>{
+                  if(!aggCats[c]) aggCats[c]={ok:0,total:0};
+                  aggCats[c].ok+=v.ok; aggCats[c].total+=v.total;
+                });
+              });
+              return <>
+                <div style={s.sectionTitle}>📦 累計（全セッション）</div>
+                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                  {[["累計解答",totalA],["累計正解",totalC],["累計正解率",`${ovPct}%`]].map(([l,v],i)=>(
+                    <div key={l} style={s.statBox}>
+                      <div style={{...s.statNum,color:i===2?rateColor(ovPct):C.accent,fontSize:16}}>{v}</div>
+                      <div style={s.statLabel}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+                {Object.keys(aggCats).length>0 && <>
+                  <div style={s.sectionTitle}>累計分野別正解率</div>
+                  {Object.entries(aggCats)
+                    .map(([c,st])=>({c,pct:Math.round(st.ok/st.total*100),ok:st.ok,total:st.total}))
+                    .sort((a,b)=>a.pct-b.pct)
+                    .map(({c,pct,ok,total})=>(
+                      <div key={c} style={s.catBarRow}>
+                        <div style={{fontSize:12,width:140,flexShrink:0,lineHeight:1.3}}>{c}</div>
+                        <div style={{flex:1,height:7,background:C.surface2,borderRadius:4,overflow:"hidden"}}>
+                          <div style={{height:"100%",borderRadius:4,width:`${pct}%`,background:rateColor(pct),transition:"width .4s"}}/>
+                        </div>
+                        <div style={{fontFamily:"monospace",fontSize:12,width:72,textAlign:"right",color:rateColor(pct)}}>{pct}% ({ok}/{total})</div>
+                      </div>
+                    ))
+                  }
+                </>}
+                <div style={s.sectionTitle}>直近のセッション（最新20件）</div>
+                <div style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 13px",marginBottom:12}}>
+                  {savedSessions.slice(-20).reverse().map((sess,i)=>{
+                    const d=new Date(sess.date);
+                    const ds=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+                    return(
+                      <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:i<Math.min(savedSessions.length,20)-1?`1px solid ${C.border}`:"none"}}>
+                        <span style={{fontSize:12,color:C.muted,fontFamily:"monospace"}}>{ds} ・ {sess.cat}</span>
+                        <span style={{fontFamily:"monospace",fontSize:13,fontWeight:600,color:rateColor(sess.pct)}}>{sess.correct}/{sess.total}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer"}}
+                  onClick={()=>{ if(window.confirm("保存済みの履歴を全て削除しますか？")){ localStorage.removeItem("fe_sessions"); setSavedSessions([]); } }}>
+                  履歴をクリア
+                </button>
+              </>;
+            })()}
+            {totalAnswered===0 && savedSessions.length===0 && <div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"12px 0"}}>クイズに挑戦すると履歴が表示されます。</div>}
+          </div>
+        )}
       </div>
     </div>
   );
