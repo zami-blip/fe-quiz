@@ -24,15 +24,24 @@ const LS_KEY = "fe_used_ids";
 const store = {
   saveIds(ids){
     try{
-      localStorage.setItem(LS_KEY, JSON.stringify(ids));
+      const str = JSON.stringify(ids);
+      localStorage.setItem(LS_KEY, str);
+      console.log("localStorage saved:", ids.length, "ids");
     }catch(e){
-      console.error("localStorage error:", e);
+      console.error("localStorage setItem error:", e.name, e.message);
+      alert("保存エラー: " + e.name + " - " + e.message);
     }
     gas.post({type:"progress", usedIds:ids});
   },
   loadIds(){
-    try{ const v=localStorage.getItem(LS_KEY); return v?JSON.parse(v):[]; }
-    catch(e){ return []; }
+    try{
+      const v = localStorage.getItem(LS_KEY);
+      console.log("localStorage loaded:", v ? JSON.parse(v).length : 0, "ids");
+      return v ? JSON.parse(v) : [];
+    }catch(e){
+      console.error("localStorage getItem error:", e);
+      return [];
+    }
   },
 };
 
@@ -399,12 +408,22 @@ export default function App(){
               {/* localStorage確認ボタン */}
               <button style={{width:"100%",padding:8,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:11,cursor:"pointer",marginTop:6}}
                 onClick={()=>{
-                  const v = localStorage.getItem('fe_used_ids');
-                  if(v){
-                    const ids = JSON.parse(v);
-                    alert(`✓ localStorage動作中\n保存済みID数: ${ids.length}問`);
-                  } else {
-                    alert('✗ localStorageに保存なし（毎回リセットされている）');
+                  try{
+                    localStorage.setItem("fe_test","1");
+                    const r = localStorage.getItem("fe_test");
+                    localStorage.removeItem("fe_test");
+                    if(r==="1"){
+                      const v = localStorage.getItem('fe_used_ids');
+                      if(v){
+                        alert(`✓ localStorage動作中\n保存済みID数: ${JSON.parse(v).length}問`);
+                      } else {
+                        alert("✓ localStorage書き込みOK\nただしfe_used_idsはまだ保存されていない");
+                      }
+                    } else {
+                      alert("✗ localStorage書き込み後に読めない");
+                    }
+                  }catch(e){
+                    alert("✗ localStorageエラー: " + e.name + "\n" + e.message);
                   }
                 }}>
                 🔍 localStorage確認
