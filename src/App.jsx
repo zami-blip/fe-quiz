@@ -3,6 +3,7 @@ import React, { useState, useCallback, useEffect } from "react";
 // localStorage管理
 const LS_USED = "fe_used_ids";
 const LS_SESSIONS = "fe_sessions";
+const LS_MISSED = "fe_missed";
 
 const store = {
   saveIds(ids){ try{ localStorage.setItem(LS_USED, JSON.stringify(ids)); }catch(e){} },
@@ -17,6 +18,8 @@ const store = {
     }catch(e){}
   },
   loadSessions(){ try{ const v=localStorage.getItem(LS_SESSIONS); return v?JSON.parse(v):[]; }catch(e){ return []; } },
+  saveMissed(list){ try{ localStorage.setItem(LS_MISSED, JSON.stringify(list)); }catch(e){} },
+  loadMissed(){ try{ const v=localStorage.getItem(LS_MISSED); return v?JSON.parse(v):[]; }catch(e){ return []; } },
 };
 
 const CATS = [
@@ -187,6 +190,9 @@ export default function App(){
     // 過去のセッション履歴を復元
     const saved = store.loadSessions();
     if(saved.length > 0) setSavedSessions(saved);
+    // 復習リストを復元
+    const missed = store.loadMissed();
+    if(missed.length > 0) setMissedList(missed);
     setProgressLoading(false);
   },[]); // eslint-disable-line
 
@@ -238,7 +244,13 @@ export default function App(){
     const ok = choice.label===q.correct;
     setAllHistory(h=>[...h,{cat:q.cat,topic:q.topic,correct:ok}]);
     setCatStats(prev=>{const cur=prev[q.cat]||{ok:0,total:0};return{...prev,[q.cat]:{ok:cur.ok+(ok?1:0),total:cur.total+1}};});
-    if(!ok) setMissedList(m=>[...m,q]);
+    if(!ok){
+      setMissedList(m=>{
+        const updated=[...m,q];
+        store.saveMissed(updated);
+        return updated;
+      });
+    }
     setAnswers(prev=>{const n=[...prev];n[qIdx]=choice.label;return n;});
   },[showFb,questions,qIdx]);
 
@@ -275,7 +287,7 @@ export default function App(){
   const loadDbHistory = useCallback(()=>{ /* localStorage版は履歴タブで直接表示 */ },[]);
 
   const clearDbMissed = useCallback(async()=>{
-    if(!window.confirm("GASの復習リストを全削除しますか？\n（スプレッドシートのmissedシートを手動で削除してください）")) return;
+    if(!window.confirm("復習リストを全削除しますか？")) return;
     setDbMissed([]);
   },[]);
 
@@ -290,7 +302,7 @@ export default function App(){
   },[questions,answers,catStats]);
 
   const resetSession = useCallback(()=>{setPhase("idle");setAnalysis("");setCopyText("");setCopied(false);},[]);
-  const clearMissed = useCallback(()=>setMissedList([]),[]);
+  const clearMissed = useCallback(()=>{ setMissedList([]); store.saveMissed([]); },[]);
 
   const totalAnswered=allHistory.length;
   const totalCorrect=allHistory.filter(h=>h.correct).length;
