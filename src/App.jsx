@@ -280,6 +280,27 @@ export default function App(){
           ...Object.entries(catStats).map(([c,s])=>`${c}: ${Math.round(s.ok/s.total*100)}% (${s.ok}/${s.total})`),
         ];
         setCopyText(lines.join("\n"));
+
+        // このセッションの分野別集計を作りlocalStorageへ永続化する
+        const sessionCats = {};
+        questions.forEach((q,i)=>{
+          if(!sessionCats[q.cat]) sessionCats[q.cat]={ok:0,total:0};
+          sessionCats[q.cat].total+=1;
+          if(answers[i]!==null && answers[i]===q.correct) sessionCats[q.cat].ok+=1;
+        });
+        const session={
+          date: now.getTime(),
+          cat: cat,
+          total: questions.length,
+          correct: correct,
+          pct: Math.round(correct/questions.length*100),
+          cats: sessionCats,
+        };
+        store.addSession(session);
+        setSavedSessions(prev=>{
+          const updated=[...prev, session];
+          return updated.length>100 ? updated.slice(updated.length-100) : updated;
+        });
       }
     }
   },[phase]); // eslint-disable-line
@@ -314,7 +335,7 @@ export default function App(){
       <div style={s.container}>
         <header style={s.header}>
           <div style={s.h1}>FE 科目A Quiz</div>
-          <div style={s.sub}>基本情報技術者 — 174問内蔵</div>
+          <div style={s.sub}>基本情報技術者 — 220問内蔵</div>
         </header>
 
         <div style={s.tabs}>
@@ -369,7 +390,7 @@ export default function App(){
               </div>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
                 onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。よろしいですか？")){ saveUsedIds([]); } }}>
-                🔄 問題をリセット（全174問に戻す）
+                🔄 問題をリセット（全220問に戻す）
               </button>
             </div>
           )}
