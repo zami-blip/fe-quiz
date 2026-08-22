@@ -5,6 +5,7 @@ const LS_USED = "fe_used_ids";
 const LS_SESSIONS = "fe_sessions";
 const LS_MISSED = "fe_missed";
 const LS_LIFETIME = "fe_lifetime"; // 生涯累計(セッション履歴とは別に、間引かれず増え続ける集計)
+const LS_CYCLE = "fe_cycle"; // 今回の周回成績(問題プールを1周する間、リロードしても消えない)
 
 const store = {
   saveIds(ids){ try{ localStorage.setItem(LS_USED, JSON.stringify(ids)); }catch(e){} },
@@ -58,6 +59,11 @@ const store = {
   },
   saveMissed(list){ try{ localStorage.setItem(LS_MISSED, JSON.stringify(list)); }catch(e){} },
   loadMissed(){ try{ const v=localStorage.getItem(LS_MISSED); return v?JSON.parse(v):[]; }catch(e){ return []; } },
+  // 今回の周回成績: 問題プールを1周する(usedIdsがリセットされる)まで保持し、
+  // ページのリロードやタブの再読込では消えないようにする
+  saveCycle(data){ try{ localStorage.setItem(LS_CYCLE, JSON.stringify(data)); }catch(e){} },
+  loadCycle(){ try{ const v=localStorage.getItem(LS_CYCLE); return v?JSON.parse(v):{history:[],catStats:{}}; }catch(e){ return {history:[],catStats:{}}; } },
+  clearCycle(){ try{ localStorage.removeItem(LS_CYCLE); }catch(e){} },
 };
 
 const CATS = [
@@ -140,7 +146,7 @@ async function analyzeResults(questions, answers, catStats){
   return await callClaude([{role:"user",content:`【回答】\n${log}\n\n【累計】\n${stats}`}], system);
 }
 
-function ReviewCopyBox({ missedList, catStats }){
+function ReviewCopyBox({ missedList, lifetimeByCat }){
   const [copied, setCopied] = useState(false);
 
   const buildText = useCallback(()=>{
@@ -154,9 +160,12 @@ function ReviewCopyBox({ missedList, catStats }){
       `---`,
     ];
     Object.entries(catGroup).forEach(([cat, qs])=>{
-      const st = catStats[cat];
-      const pct = st ? Math.round(st.ok/st.total*100) : 0;
-      lines.push(`\n■ ${cat}（正解率 ${pct}%）`);
+      // 分野別の正解率は「累計(生涯)」の実績を使う。今回の周回だけの一時的な
+      // 集計だと、ページを開き直した直後は0%になってしまうため。
+      const st = lifetimeByCat[cat];
+      const pct = st && st.total>0 ? Math.round(st.ok/st.total*100) : null;
+      const pctLabel = pct===null ? "累計データなし" : `累計正解率 ${pct}%`;
+      lines.push(`\n■ ${cat}（${pctLabel}）`);
       qs.forEach((q,i)=>{
         const cc = q.choices.find(c=>c.label===q.correct);
         lines.push(`Q: ${q.q}`);
@@ -166,7 +175,7 @@ function ReviewCopyBox({ missedList, catStats }){
       });
     });
     return lines.join("\n");
-  },[missedList, catStats]);
+  },[missedList, lifetimeByCat]);
 
   const handleCopy = useCallback(()=>{
     const text = buildText();
@@ -224,7 +233,7 @@ export default function App(){
     const ids = store.loadIds().filter(id => ALL_QUESTIONS.some(q=>q.id===id));
     if(ids.length > 0){
       setUsedIds(ids);
-      setProgressError(`✓ ${ids.length}問分の進捗を復元`);
+      setProgressError(`✓ 今の周回で${ids.length}問に解答済み（残り${ALL_QUESTIONS.length-ids.length}問／全${ALL_QUESTIONS.length}問）`);
     }
     // 過去のセッション履歴を復元(直近最大100件、表示専用)
     const saved = store.loadSessions();
@@ -234,6 +243,15 @@ export default function App(){
     // 復習リストを復元
     const missed = store.loadMissed();
     if(missed.length > 0) setMissedList(missed);
+    // 今回の周回成績を復元(リロードしても消えない。usedIdsが空＝新しい周回なら
+    // 古いcycleデータが残っていても無視して空から始める)
+    if(ids.length > 0){
+      const cyc = store.loadCycle();
+      if(cyc.history && cyc.history.length > 0) setAllHistory(cyc.history);
+      if(cyc.catStats) setCatStats(cyc.catStats);
+    } else {
+      store.clearCycle();
+    }
     setProgressLoading(false);
   },[]); // eslint-disable-line
 
@@ -265,6 +283,8 @@ export default function App(){
         const fresh = ALL_QUESTIONS.filter(q=>cat==="すべて"||q.cat===cat);
         picked = shuffle(fresh).slice(0,10);
         saveUsedIds(picked.map(q=>q.id));
+        // 全問題を1周し終えて新しい周回に入るため、今回の周回成績もリセットする
+        setAllHistory([]); setCatStats({}); store.clearCycle();
       } else {
         picked = shuffle(base).slice(0,10);
         saveUsedIds([...usedIds, ...picked.map(q=>q.id)]);
@@ -283,8 +303,16 @@ export default function App(){
     setChosen(choice); setShowFb(true);
     const q = questions[qIdx];
     const ok = choice.label===q.correct;
-    setAllHistory(h=>[...h,{cat:q.cat,topic:q.topic,correct:ok}]);
-    setCatStats(prev=>{const cur=prev[q.cat]||{ok:0,total:0};return{...prev,[q.cat]:{ok:cur.ok+(ok?1:0),total:cur.total+1}};});
+    setAllHistory(h=>{
+      const updatedHistory=[...h,{cat:q.cat,topic:q.topic,correct:ok}];
+      setCatStats(prev=>{
+        const cur=prev[q.cat]||{ok:0,total:0};
+        const updatedStats={...prev,[q.cat]:{ok:cur.ok+(ok?1:0),total:cur.total+1}};
+        store.saveCycle({history:updatedHistory, catStats:updatedStats});
+        return updatedStats;
+      });
+      return updatedHistory;
+    });
     if(!ok){
       setMissedList(m=>{
         const updated=[...m,q];
@@ -431,7 +459,7 @@ export default function App(){
                 </div>
               </div>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
-                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。よろしいですか？")){ saveUsedIds([]); } }}>
+                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
                 🔄 問題をリセット（全300問に戻す）
               </button>
             </div>
@@ -544,7 +572,7 @@ export default function App(){
               ?<div style={{textAlign:"center",color:C.muted,fontSize:14,padding:"48px 0"}}>間違えた問題はまだありません。</div>
               :<>
                 {/* コピーテキスト生成 */}
-                <ReviewCopyBox missedList={missedList} catStats={catStats}/>
+                <ReviewCopyBox missedList={missedList} lifetimeByCat={lifetime.byCat||{}}/>
                 <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:13,cursor:"pointer",marginBottom:16}} onClick={clearMissed}>復習リストをクリア</button>
                 {missedList.map((q,i)=>{
                   const cc=q.choices.find(c=>c.label===q.correct);
@@ -569,12 +597,12 @@ export default function App(){
               {[["解答数",totalAnswered],["正解数",totalCorrect],["正解率",`${overallPct}%`]].map(([l,v],i)=>(
                 <div key={l} style={s.statBox}>
                   <div style={{...s.statNum,color:i===2?rateColor(overallPct):C.accent}}>{v}</div>
-                  <div style={s.statLabel}>{l}（今回）</div>
+                  <div style={s.statLabel}>{l}（今の周回）</div>
                 </div>
               ))}
             </div>
             {Object.keys(catStats).length>0 && <>
-              <div style={s.sectionTitle}>分野別 正解率（今回のセッション）</div>
+              <div style={s.sectionTitle}>分野別 正解率（今の周回・{ALL_QUESTIONS.length}問を1周する間ずっと蓄積）</div>
               {Object.entries(catStats)
                 .map(([c,st])=>({c,pct:Math.round(st.ok/st.total*100),ok:st.ok,total:st.total}))
                 .sort((a,b)=>a.pct-b.pct)
