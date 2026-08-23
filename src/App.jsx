@@ -406,6 +406,7 @@ export default function App(){
         <header style={s.header}>
           <div style={s.h1}>FE 科目A Quiz</div>
           <div style={s.sub}>基本情報技術者 — 300問内蔵</div>
+          <a href="/b" style={{display:"inline-block",marginTop:8,fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>科目Bの問題を解く →</a>
         </header>
 
         <div style={s.tabs}>
