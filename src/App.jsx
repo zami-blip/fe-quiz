@@ -661,11 +661,11 @@ export default function App(){
                 {Object.keys(aggCats).length>0 && <>
                   <div style={s.sectionTitle}>累計分野別正解率</div>
                   {Object.entries(aggCats)
-                    .map(([c,st])=>({c,pct:Math.round(st.ok/st.total*100),ok:st.ok,total:st.total}))
+                    .map(([c,st])=>({c,pct:Math.round(st.ok/st.total*100),ok:st.ok,total:st.total, legacy: !CATS.includes(c)}))
                     .sort((a,b)=>a.pct-b.pct)
-                    .map(({c,pct,ok,total})=>(
+                    .map(({c,pct,ok,total,legacy})=>(
                       <div key={c} style={s.catBarRow}>
-                        <div style={{fontSize:12,width:140,flexShrink:0,lineHeight:1.3}}>{c}</div>
+                        <div style={{fontSize:12,width:140,flexShrink:0,lineHeight:1.3,color:legacy?C.muted:undefined}}>{c}{legacy?"（分野再編前の記録）":""}</div>
                         <div style={{flex:1,height:7,background:C.surface2,borderRadius:4,overflow:"hidden"}}>
                           <div style={{height:"100%",borderRadius:4,width:`${pct}%`,background:rateColor(pct),transition:"width .4s"}}/>
                         </div>
