@@ -484,6 +484,22 @@ export default function App(){
                 onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
                 🔄 問題をリセット（全96問に戻す）
               </button>
+              <button style={{width:"100%",padding:9,background:"none",border:`1px solid #7f1d1d`,color:"#f87171",borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
+                onClick={()=>{
+                  if(!window.confirm("累計成績・履歴・復習リストを含む全てのデータを完全に削除します。これまでの学習記録は元に戻せません。本当によろしいですか？")) return;
+                  if(!window.confirm("最終確認です。累計解答数・正解率など、これまでの記録は全て消えます。本当に実行しますか？")) return;
+                  try{
+                    localStorage.removeItem(LS_USED);
+                    localStorage.removeItem(LS_SESSIONS);
+                    localStorage.removeItem(LS_MISSED);
+                    localStorage.removeItem(LS_LIFETIME);
+                    localStorage.removeItem(LS_CYCLE);
+                    localStorage.removeItem(LS_QVERSION);
+                  }catch(e){}
+                  window.location.reload();
+                }}>
+                🗑️ 完全リセット（累計成績も含めて全データ削除）
+              </button>
             </div>
           )}
 
