@@ -224,6 +224,7 @@ export default function AppB(){
   const [lifetime, setLifetime] = useState({totalAnswered:0,totalCorrect:0,byCat:{}});
   const [missedList, setMissedList] = useState([]);
   const [catStats, setCatStats] = useState({});
+  const [isWeakSession, setIsWeakSession] = useState(false);
   const [copyText, setCopyText] = useState("");
   const [copied, setCopied] = useState(false);
   const [progressLoading, setProgressLoading] = useState(true);
@@ -290,8 +291,10 @@ export default function AppB(){
 
   const startSession = useCallback(async()=>{
     let picked = [];
+    const usingWeak = weakMode && weakIds.length > 0;
+    setIsWeakSession(usingWeak);
 
-    if(weakMode && weakIds.length > 0){
+    if(usingWeak){
       // 苦手優先：間違えた問題IDから優先出題
       const weakInAll = ALL_QUESTIONS.filter(q => weakIds.includes(q.id));
       const others = ALL_QUESTIONS.filter(q => !weakIds.includes(q.id) && (cat==="すべて" || q.cat===cat));
@@ -324,16 +327,20 @@ export default function AppB(){
     setChosen(choice); setShowFb(true);
     const q = questions[qIdx];
     const ok = choice.label===q.correct;
-    setAllHistory(h=>{
-      const updatedHistory=[...h,{cat:q.cat,topic:q.topic,correct:ok}];
-      setCatStats(prev=>{
-        const cur=prev[q.cat]||{ok:0,total:0};
-        const updatedStats={...prev,[q.cat]:{ok:cur.ok+(ok?1:0),total:cur.total+1}};
-        store.saveCycle({history:updatedHistory, catStats:updatedStats});
-        return updatedStats;
+    // 苦手優先モードは既出問題を意図的に何度も再出題する復習用モードのため、
+    // 「今の周回」の集計(allHistory/catStats)には含めない。
+    if(!isWeakSession){
+      setAllHistory(h=>{
+        const updatedHistory=[...h,{cat:q.cat,topic:q.topic,correct:ok}];
+        setCatStats(prev=>{
+          const cur=prev[q.cat]||{ok:0,total:0};
+          const updatedStats={...prev,[q.cat]:{ok:cur.ok+(ok?1:0),total:cur.total+1}};
+          store.saveCycle({history:updatedHistory, catStats:updatedStats});
+          return updatedStats;
+        });
+        return updatedHistory;
       });
-      return updatedHistory;
-    });
+    }
     if(!ok){
       setMissedList(m=>{
         const updated=[...m,q];
@@ -342,7 +349,7 @@ export default function AppB(){
       });
     }
     setAnswers(prev=>{const n=[...prev];n[qIdx]=choice.label;return n;});
-  },[showFb,questions,qIdx]);
+  },[showFb,questions,qIdx,isWeakSession]);
 
   const handleNext = useCallback(()=>{
     const next=qIdx+1;
