@@ -416,8 +416,25 @@ export default function AppB(){
   const resetSession = useCallback(()=>{setPhase("idle");setAnalysis("");setCopyText("");setCopied(false);},[]);
   const clearMissed = useCallback(()=>{ setMissedList([]); store.saveMissed([]); },[]);
 
-  const totalAnswered=allHistory.length;
-  const totalCorrect=allHistory.filter(h=>h.correct).length;
+  // 「今の周回」の集計は、周回した問題(usedIds)と復習リスト(missedList)から毎回
+  // 計算し直す(catStats等の別カウンタに頼らない)。この2つは常にセットでリセットされる
+  // ため、狂いようがない導出値になる: 分野別正解数 = 分野別出題数 - 分野別不正解数(復習)
+  const cycleStats = (()=>{
+    const catTotal = {};
+    usedIds.forEach(id=>{
+      const q = ALL_QUESTIONS.find(x=>x.id===id);
+      if(q) catTotal[q.cat] = (catTotal[q.cat]||0) + 1;
+    });
+    const catMissed = {};
+    missedList.forEach(q=>{ catMissed[q.cat] = (catMissed[q.cat]||0) + 1; });
+    const byCat = {};
+    Object.entries(catTotal).forEach(([cat,total])=>{
+      byCat[cat] = { total, ok: total - (catMissed[cat]||0) };
+    });
+    return { byCat, totalAnswered: usedIds.length, totalCorrect: usedIds.length - missedList.length };
+  })();
+  const totalAnswered = cycleStats.totalAnswered;
+  const totalCorrect = cycleStats.totalCorrect;
   const overallPct=totalAnswered>0?Math.round(totalCorrect/totalAnswered*100):0;
 
   return(
@@ -646,9 +663,9 @@ export default function AppB(){
                 </div>
               ))}
             </div>
-            {Object.keys(catStats).length>0 && <>
+            {Object.keys(cycleStats.byCat).length>0 && <>
               <div style={s.sectionTitle}>分野別 正解率（今の周回・{ALL_QUESTIONS.length}問を1周する間ずっと蓄積）</div>
-              {Object.entries(catStats)
+              {Object.entries(cycleStats.byCat)
                 .map(([c,st])=>({c,pct:Math.round(st.ok/st.total*100),ok:st.ok,total:st.total}))
                 .sort((a,b)=>a.pct-b.pct)
                 .map(({c,pct,ok,total})=>(
