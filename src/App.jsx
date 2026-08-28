@@ -416,22 +416,21 @@ export default function App(){
   const resetSession = useCallback(()=>{setPhase("idle");setAnalysis("");setCopyText("");setCopied(false);},[]);
   const clearMissed = useCallback(()=>{ setMissedList([]); store.saveMissed([]); },[]);
 
-  // 「今の周回」の集計は、周回した問題(usedIds)と復習リスト(missedList)から毎回
-  // 計算し直す(catStats等の別カウンタに頼らない)。この2つは常にセットでリセットされる
-  // ため、狂いようがない導出値になる: 分野別正解数 = 分野別出題数 - 分野別不正解数(復習)
+  // 「今の周回」の集計はallHistory(今の周回で回答した{cat,correct}の記録)から
+  // 毎回計算し直す。allHistoryはusedIdsと必ず同じタイミングでリセットされるため
+  // (store.clearCycle()を常に一緒に呼んでいる)、この2つの間にズレは生じない。
+  // ※missedList(復習リスト)は周回をまたいで蓄積し続ける別物であり、
+  // 「今の周回」の集計には使えない(前回、誤って使ってしまい負の値になるバグを出した)。
   const cycleStats = (()=>{
-    const catTotal = {};
-    usedIds.forEach(id=>{
-      const q = ALL_QUESTIONS.find(x=>x.id===id);
-      if(q) catTotal[q.cat] = (catTotal[q.cat]||0) + 1;
-    });
-    const catMissed = {};
-    missedList.forEach(q=>{ catMissed[q.cat] = (catMissed[q.cat]||0) + 1; });
     const byCat = {};
-    Object.entries(catTotal).forEach(([cat,total])=>{
-      byCat[cat] = { total, ok: total - (catMissed[cat]||0) };
+    allHistory.forEach(h=>{
+      if(!byCat[h.cat]) byCat[h.cat] = { ok:0, total:0 };
+      byCat[h.cat].total += 1;
+      if(h.correct) byCat[h.cat].ok += 1;
     });
-    return { byCat, totalAnswered: usedIds.length, totalCorrect: usedIds.length - missedList.length };
+    const totalAnswered = allHistory.length;
+    const totalCorrect = allHistory.filter(h=>h.correct).length;
+    return { byCat, totalAnswered, totalCorrect };
   })();
   const totalAnswered = cycleStats.totalAnswered;
   const totalCorrect = cycleStats.totalCorrect;
