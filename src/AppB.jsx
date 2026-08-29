@@ -303,20 +303,24 @@ export default function AppB(){
       picked = shuffle([...shuffledWeak, ...rest]).slice(0, 10);
     } else {
       const base = ALL_QUESTIONS.filter(q=>(cat==="すべて"||q.cat===cat) && !usedIds.includes(q.id));
-      if(base.length < 10){
+      if(base.length === 0){
         const fresh = ALL_QUESTIONS.filter(q=>cat==="すべて"||q.cat===cat);
         picked = shuffle(fresh).slice(0,10);
         saveUsedIds(picked.map(q=>q.id));
         // 全問題を1周し終えて新しい周回に入るため、今回の周回成績もリセットする
         setAllHistory([]); setCatStats({}); store.clearCycle();
       } else {
-        picked = shuffle(base).slice(0,10);
+        // 残りが10問未満(周回の端数)の場合は、その残り分だけの少人数セッションにする。
+        // 以前は残り10問未満で無条件に「周回終了」と誤判定し、周回の途中でも
+        // 今の周回の成績を強制リセットしてしまうバグがあった。
+        const sessionSize = Math.min(10, base.length);
+        picked = shuffle(base).slice(0, sessionSize);
         saveUsedIds([...usedIds, ...picked.map(q=>q.id)]);
       }
     }
 
     setQuestions(picked);
-    setAnswers(new Array(10).fill(null));
+    setAnswers(new Array(picked.length).fill(null));
     setQIdx(0); setChosen(null); setShowFb(false);
     setAnalysis(""); setCopyText(""); setCopied(false);
     setPhase("question");
@@ -483,7 +487,7 @@ export default function AppB(){
                 </div>
               </div>
               <button style={{...s.btn(),width:"100%"}} onClick={startSession}>
-                {weakMode ? "🎯 苦手優先モードでスタート" : "スタート（10問）"}
+                {weakMode ? "🎯 苦手優先モードでスタート" : `スタート（${Math.min(10, available.length===0?10:available.length)}問）`}
               </button>
               {/* 苦手優先モード切替 */}
               <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",background:weakMode?"rgba(63,185,80,.08)":"rgba(255,255,255,.03)",border:`1px solid ${weakMode?C.green:C.border}`,borderRadius:8,cursor:"pointer"}}
