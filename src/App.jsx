@@ -277,12 +277,17 @@ export default function App(){
     setProgressLoading(false);
   },[]); // eslint-disable-line
 
-  // 残り問題数
+  // 残り問題数(分野フィルタ適用後)
   const available = ALL_QUESTIONS.filter(q=>{
     const catOk = cat==="すべて" || q.cat===cat;
     const notUsed = !usedIds.includes(q.id);
     return catOk && notUsed;
   });
+  // 分子(available.length)と同じ母集団で揃えた分母。
+  // 従来はここが常にALL_QUESTIONS.length(全100問)固定だったため、
+  // 分野を絞ると「1問/100問中」のように分子分母の母集団が食い違って表示され、
+  // 全体の周回進捗(今の周回で30問に解答済み等)と矛盾しているように見える不具合があった。
+  const catTotal = cat==="すべて" ? ALL_QUESTIONS.length : ALL_QUESTIONS.filter(q=>q.cat===cat).length;
 
   const saveUsedIds = useCallback((ids)=>{
     setUsedIds(ids);
@@ -477,7 +482,7 @@ export default function App(){
               ) : (
                 <div style={{marginBottom:12,fontSize:13,color:C.muted}}>
                   残り問題: <span style={s.stockBadge(available.length)}>{available.length}問</span>
-                  <span style={{fontSize:11,color:C.muted,marginLeft:8}}>/ {ALL_QUESTIONS.length}問中</span>
+                  <span style={{fontSize:11,color:C.muted,marginLeft:8}}>/ {catTotal}問中{cat!=="すべて"?`（${cat}）`:""}</span>
                   {progressError && <div style={{fontSize:11,color:progressError.startsWith("✓")?C.green:C.warn,marginTop:4}}>{progressError}</div>}
                 </div>
               )}

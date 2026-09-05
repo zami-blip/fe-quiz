@@ -277,12 +277,14 @@ export default function AppB(){
     setProgressLoading(false);
   },[]); // eslint-disable-line
 
-  // 残り問題数
+  // 残り問題数(分野フィルタ適用後)
   const available = ALL_QUESTIONS.filter(q=>{
     const catOk = cat==="すべて" || q.cat===cat;
     const notUsed = !usedIds.includes(q.id);
     return catOk && notUsed;
   });
+  // 分子と同じ母集団の分母(科目Aと同じ修正)
+  const catTotal = cat==="すべて" ? ALL_QUESTIONS.length : ALL_QUESTIONS.filter(q=>q.cat===cat).length;
 
   const saveUsedIds = useCallback((ids)=>{
     setUsedIds(ids);
@@ -476,7 +478,7 @@ export default function AppB(){
               ) : (
                 <div style={{marginBottom:12,fontSize:13,color:C.muted}}>
                   残り問題: <span style={s.stockBadge(available.length)}>{available.length}問</span>
-                  <span style={{fontSize:11,color:C.muted,marginLeft:8}}>/ {ALL_QUESTIONS.length}問中</span>
+                  <span style={{fontSize:11,color:C.muted,marginLeft:8}}>/ {catTotal}問中{cat!=="すべて"?`（${cat}）`:""}</span>
                   {progressError && <div style={{fontSize:11,color:progressError.startsWith("✓")?C.green:C.warn,marginTop:4}}>{progressError}</div>}
                 </div>
               )}
