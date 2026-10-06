@@ -592,6 +592,136 @@ const ALL_QUESTIONS = [
     ],
     "correct": "イ",
     "hint": "正解理由: パスワード(知識要素)と端末のワンタイムコード(所持要素)という異なる種類の要素を組み合わせているため多要素認証にあたる。間違いやすいポイント: どちらも「認証に使う情報」という点だけを見て単一要素だと誤解してしまう。覚え方: 「知識・所持・生体」のうち異なる種類を2つ以上組み合わせたものが多要素認証。"
+  },
+  {
+    "id": 21,
+    "cat": "配列操作",
+    "topic": "周期処理(干支)",
+    "q": "干支を求める関数eto(year)について、2001年は巳(添字5)である。配列の添字は0から始まる。\n○文字列型: eto(整数型: year)\n  文字列型の配列: E ← {\"子\",\"丑\",\"寅\",\"卯\",\"辰\",\"巳\",\"午\",\"未\",\"申\",\"酉\",\"戌\",\"亥\"}\n  return E[(5 + (year - 2001)) mod 12]\neto(2025)とeto(2032)の戻り値の組合せはどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "午・丑"
+      },
+      {
+        "label": "イ",
+        "text": "巳・丑"
+      },
+      {
+        "label": "ウ",
+        "text": "巳・子"
+      },
+      {
+        "label": "エ",
+        "text": "午・子"
+      }
+    ],
+    "correct": "ウ",
+    "hint": "正解理由: 2025は(5+24) mod 12=5で巳、2032は(5+31) mod 12=0で子。間違いやすいポイント: 基準年との差を足し忘れる、mod 12の余りを1ずらして数える。覚え方: 基準の添字+年差を周期Nで割った余りが添字。"
+  },
+  {
+    "id": 22,
+    "cat": "ソートアルゴリズム",
+    "topic": "クイックソートの分割",
+    "q": "末尾を基準値にするパーティション。\n○整数型: partition(整数型の配列: A, 整数型: lo, 整数型: hi)\n  整数型: p ← A[hi]\n  整数型: i ← lo - 1\n  整数型: j\n  for (j を lo から hi - 1 まで 1 ずつ増やす)\n    if (A[j] <= p)\n      i ← i + 1\n      A[i] と A[j] を交換する\n    endif\n  endfor\n  A[i + 1] と A[hi] を交換する\n  return i + 1\nA = {5, 8, 2, 7, 3, 6, 4}に対してpartition(A, 0, 6)を実行した後のAと戻り値の組合せはどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "{2,3,5,7,8,6,4}・1"
+      },
+      {
+        "label": "イ",
+        "text": "{2,3,4,7,8,6,5}・2"
+      },
+      {
+        "label": "ウ",
+        "text": "{2,3,4,7,8,6,5}・3"
+      },
+      {
+        "label": "エ",
+        "text": "{2,3,4,5,6,7,8}・2"
+      }
+    ],
+    "correct": "イ",
+    "hint": "正解理由: 基準値4以下の2と3が左へ集まり、最後にA[2]とA[6]を交換して4が確定、戻り値は基準値の位置2。間違いやすいポイント: 最後の交換を忘れる(戻り値1)、戻り値を要素数や位置+1と取り違える、全体が整列されると誤解する。覚え方: partitionは基準値の位置を確定するだけで全体は整列しない。"
+  },
+  {
+    "id": 23,
+    "cat": "探索アルゴリズム",
+    "topic": "二分探索の途中状態",
+    "q": "二分探索。\n○整数型: bsearch(整数型の配列: A, 整数型: n, 整数型: x)\n  整数型: left ← 0\n  整数型: right ← n - 1\n  整数型: mid\n  while (left <= right)\n    mid ← (left + right) ÷ 2 の商\n    if (A[mid] = x)\n      return mid\n    elseif (A[mid] < x)\n      left ← mid + 1\n    else\n      right ← mid - 1\n    endif\n  endwhile\n  return -1\nA = {3, 8, 12, 17, 21, 26, 30, 35}、n = 8、x = 12のとき、whileの2回目の繰返しが終わった時点の(left, right)と、最終的な戻り値の組合せはどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "(0,2)・2"
+      },
+      {
+        "label": "イ",
+        "text": "(1,2)・2"
+      },
+      {
+        "label": "ウ",
+        "text": "(2,2)・3"
+      },
+      {
+        "label": "エ",
+        "text": "(2,2)・2"
+      }
+    ],
+    "correct": "エ",
+    "hint": "正解理由: 1回目はmid=3でA[3]=17>12よりright=2、2回目はmid=1でA[1]=8<12よりleft=2となり(2,2)。3回目でmid=2、A[2]=12が見つかり戻り値は2。間違いやすいポイント: 添字を1始まりで数えて3にする、1回目終了時点の(0,2)と取り違える。覚え方: 毎回midを書き出してleft/rightを更新する。"
+  },
+  {
+    "id": 24,
+    "cat": "スタック・キュー",
+    "topic": "BFSとDFSの訪問順",
+    "q": "無向グラフ(ノード1〜5、辺は1-2, 1-3, 2-4, 3-4, 4-5)を、出発点を1として探索する。隣接ノードは番号の小さい順に処理する。BFS(キュー使用)とDFS(再帰)の訪問順の組合せはどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "BFS: 1,2,3,4,5 / DFS: 1,2,4,3,5"
+      },
+      {
+        "label": "イ",
+        "text": "BFS: 1,2,4,3,5 / DFS: 1,2,3,4,5"
+      },
+      {
+        "label": "ウ",
+        "text": "BFS: 1,2,3,4,5 / DFS: 1,2,4,5,3"
+      },
+      {
+        "label": "エ",
+        "text": "BFS: 1,3,2,4,5 / DFS: 1,2,4,3,5"
+      }
+    ],
+    "correct": "ア",
+    "hint": "正解理由: BFSは1の隣接2,3を先にキューへ入れ、その後4、5の順で1,2,3,4,5。DFSは1→2→4と深く進み、4の隣接のうち小さい3を先に訪問して戻り、最後に5で1,2,4,3,5。間違いやすいポイント: DFSで4の次を5にする(隣接は小さい順なので3が先)。覚え方: BFSは近い順、DFSは行き止まりまで進んでから戻る。"
+  },
+  {
+    "id": 25,
+    "cat": "再帰処理",
+    "topic": "回文判定のバグ発見",
+    "q": "文字列が回文(前から読んでも後ろから読んでも同じ)かを判定する。左端lと右端rの文字を比べ、一致すれば内側へ進む。\n○論理型: isPal(文字列型: s, 整数型: l, 整数型: r)\n  if (l >= r)\n    return true\n  endif\n  if (s[l] ≠ s[r])\n    return false\n  endif\n  return isPal(s, l + 1, r)\nisPal(\"abba\", 0, 3)は正しい結果を返さない。実際の戻り値と、正しい修正の組合せはどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "trueを返す・修正不要"
+      },
+      {
+        "label": "イ",
+        "text": "falseを返す・条件を l = r にする"
+      },
+      {
+        "label": "ウ",
+        "text": "falseを返す・最後の行を isPal(s, l - 1, r + 1) にする"
+      },
+      {
+        "label": "エ",
+        "text": "falseを返す・最後の行を isPal(s, l + 1, r - 1) にする"
+      }
+    ],
+    "correct": "エ",
+    "hint": "正解理由: 最後の再帰でrを縮めないため、l=1,r=3でb≠aとなりfalseを返す。左右を同時に内側へ進めるisPal(s, l+1, r-1)が正しい。間違いやすいポイント: 終了条件の誤りと思い込む、再帰の方向を外側(l-1, r+1)にする。覚え方: 回文判定は左を+1、右を-1して範囲を狭める。"
   }
 ];
 
@@ -1035,7 +1165,7 @@ export default function AppB(){
               </div>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
                 onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
-                🔄 問題をリセット（全20問に戻す）
+                🔄 問題をリセット（全25問に戻す）
               </button>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid #7f1d1d`,color:"#f87171",borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
                 onClick={()=>{
