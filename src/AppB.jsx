@@ -67,6 +67,36 @@ const store = {
   clearCycle(){ try{ localStorage.removeItem(LS_CYCLE); }catch(e){} },
 };
 
+// 問題内容の識別: 問題の「追加のみ」なら周回進捗・復習リストを維持し、
+// 削除や差し替え(idが同じでも題材が変わった場合を含む)のときだけ初期化する。
+const qFp = (q) => { const s = String(q.id) + "|" + (q.cat||"") + "|" + (q.topic||""); let h = 5381; for(let i=0;i<s.length;i++){ h = (((h<<5)+h) + s.charCodeAt(i)) | 0; } return (h>>>0).toString(36); };
+const buildSignature = (qs) => "v2:" + JSON.stringify(qs.map(q => [q.id, qFp(q)]));
+const hasContentChanged = (stored, qs) => {
+  if(stored === null || stored === undefined) return false;
+  const prev = {};
+  try{
+    if(stored.startsWith("v2:")){
+      JSON.parse(stored.slice(3)).forEach(p => { prev[p[0]] = {fp:p[1], cat:null}; });
+    } else {
+      // 旧形式 "件数:id,id,..."(科目Bは "id-分野")
+      stored.slice(stored.indexOf(":")+1).split(",").forEach(x => {
+        if(x === "") return;
+        const k = x.indexOf("-");
+        if(k < 0) prev[x] = {fp:null, cat:null}; else prev[x.slice(0,k)] = {fp:null, cat:x.slice(k+1)};
+      });
+    }
+  }catch(e){ return true; }
+  const cur = {};
+  qs.forEach(q => { cur[q.id] = {fp:qFp(q), cat:q.cat}; });
+  return Object.keys(prev).some(id => {
+    const c = cur[id], p = prev[id];
+    if(!c) return true;
+    if(p.fp !== null && p.fp !== c.fp) return true;
+    if(p.cat !== null && p.cat !== c.cat) return true;
+    return false;
+  });
+};
+
 const CATS = [
   "すべて","順次・分岐処理","繰返し処理","配列操作","再帰処理",
   "ソートアルゴリズム","探索アルゴリズム","文字列処理","スタック・キュー","情報セキュリティ",
@@ -886,10 +916,10 @@ export default function AppB(){
     // 問題内容(分野構成を含む)が前回と変わっていないかを確認する。変わっていた場合、
     // 古い周回進捗・復習リストは今の分野構成と対応しなくなるため自動的にクリアする
     // (生涯累計・セッション履歴は分野構成が変わっても意味を持つ記録のため維持する)。
-    const currentSignature = ALL_QUESTIONS.length + ":" + ALL_QUESTIONS.map(q=>q.id+"-"+q.cat).join(",");
+    const currentSignature = buildSignature(ALL_QUESTIONS);
     let storedSignature = null;
     try{ storedSignature = localStorage.getItem(LS_QVERSION); }catch(e){}
-    const contentChanged = storedSignature !== null && storedSignature !== currentSignature;
+    const contentChanged = hasContentChanged(storedSignature, ALL_QUESTIONS);
     if(contentChanged){
       try{
         localStorage.removeItem(LS_USED);
