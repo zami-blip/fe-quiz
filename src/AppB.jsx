@@ -98,8 +98,8 @@ const hasContentChanged = (stored, qs) => {
 };
 
 const CATS = [
-  "すべて","順次・分岐処理","繰返し処理","配列操作","再帰処理",
-  "ソートアルゴリズム","探索アルゴリズム","文字列処理","スタック・キュー","情報セキュリティ",
+  "すべて","アルゴリズム・プログラミング","配列操作","再帰処理",
+  "ソートアルゴリズム","探索アルゴリズム","スタック・キュー","情報セキュリティ",
 ];
 
 const ALL_QUESTIONS = [
@@ -887,6 +887,88 @@ function ReviewCopyBox({ missedList, lifetimeByCat }){
   );
 }
 
+// 今の周回の問題別進捗(4分類)。missedListは使わず、allHistory(idつき)とusedIdsだけで判定する。
+// 旧形式の履歴(idなし)は問題idを推測せず「判定不能」として扱う。
+const classifyCycle = (qs, history, usedIds) => {
+  const byId = new Map();
+  (history||[]).forEach(h => { if(h && h.id != null) byId.set(h.id, h); });
+  const hasLegacy = (history||[]).some(h => h && h.id == null);
+  const used = new Set(usedIds||[]);
+  const rows = qs.map(q => {
+    const h = byId.get(q.id);
+    let st;
+    if(h) st = h.correct ? "ok" : "ng";
+    else if(used.has(q.id)) st = hasLegacy ? "unk" : "pending";
+    else st = "new";
+    return { id:q.id, topic:q.topic, cat:q.cat, st };
+  });
+  return { rows, hasLegacy };
+};
+const PROG_LABEL = { ok:"✅ 正解", ng:"❌ 不正解", pending:"⏸ 出題済み・未回答", unk:"❔ 出題済み・判定不能(旧履歴)", new:"○ 未出題" };
+const PROG_NOTE = "※この機能追加前に回答した問題は、問題IDが履歴に保存されていないため、正解・不正解・中断を問題単位では判定できません。次の周回から完全に判定できます。";
+
+function CycleProgressBox({ title, questions, history, usedIds }){
+  const [copied, setCopied] = useState(false);
+  const { rows, hasLegacy } = classifyCycle(questions, history, usedIds);
+  const groups = { ok:[], ng:[], [hasLegacy?"unk":"pending"]:[], new:[] };
+  rows.forEach(r => groups[r.st].push(r));
+  const order = hasLegacy ? ["ok","ng","unk","new"] : ["ok","ng","pending","new"];
+  const colorOf = { ok:C.green, ng:C.red, pending:C.warn, unk:C.warn, new:C.muted };
+  const shortLabel = { ok:"正解", ng:"不正解", pending:"出題済み・未回答", unk:"出題済み・判定不能", new:"未出題" };
+
+  const buildText = () => {
+    const lines = [`📊 ${title} 今の周回 進捗`, "", `全${questions.length}問`];
+    order.forEach(k => lines.push(`${shortLabel[k]}: ${groups[k].length}問`));
+    if(hasLegacy){ lines.push("", "※機能追加前の回答履歴には問題IDがないため、", "一部は正解・不正解・中断を問題単位で判定できません。"); }
+    order.forEach(k => {
+      lines.push("", `■ ${shortLabel[k]}`);
+      if(groups[k].length === 0) lines.push("(なし)");
+      groups[k].forEach(r => lines.push(`問${r.id} ${r.topic}`));
+    });
+    return lines.join("\n");
+  };
+  const handleCopy = () => {
+    const text = buildText();
+    const done = () => { setCopied(true); setTimeout(()=>setCopied(false), 2000); };
+    const fallback = () => {
+      const ta = document.getElementById("cycle-copy-area");
+      if(ta){ ta.value = text; ta.select(); try{ document.execCommand("copy"); done(); }catch(e){} }
+    };
+    try{ navigator.clipboard.writeText(text).then(done).catch(fallback); }catch(e){ fallback(); }
+  };
+
+  return(
+    <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:14, marginBottom:16}}>
+      <div style={{fontSize:13, fontWeight:600, marginBottom:10}}>今の周回の問題別進捗（全{questions.length}問）</div>
+      <div style={{display:"flex", gap:6, marginBottom:10}}>
+        {order.map(k=>(
+          <div key={k} style={{flex:1, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 4px", textAlign:"center"}}>
+            <div style={{fontFamily:"monospace", fontSize:18, fontWeight:700, color:colorOf[k]}}>{groups[k].length}</div>
+            <div style={{fontSize:10, color:C.muted, lineHeight:1.3}}>{shortLabel[k]}</div>
+          </div>
+        ))}
+      </div>
+      {hasLegacy && <div style={{fontSize:11, color:C.warn, lineHeight:1.6, marginBottom:10}}>{PROG_NOTE}</div>}
+      <div style={{display:"flex", justifyContent:"flex-end", marginBottom:8}}>
+        <button style={s.copyBtn(copied)} onClick={handleCopy}>{copied ? "✓ コピーしました" : "今の周回の進捗をコピー"}</button>
+      </div>
+      <details>
+        <summary style={{fontSize:12, color:C.accent, cursor:"pointer", padding:"4px 0"}}>問題別の一覧を開く</summary>
+        <div style={{marginTop:6}}>
+          {rows.map(r=>(
+            <div key={r.id} style={{display:"flex", gap:8, alignItems:"baseline", padding:"6px 0", borderBottom:`1px solid ${C.border}`, fontSize:12}}>
+              <span style={{fontFamily:"monospace", color:C.muted, width:44, flexShrink:0}}>問{r.id}</span>
+              <span style={{width:112, flexShrink:0, color:colorOf[r.st]}}>{PROG_LABEL[r.st]}</span>
+              <span style={{flex:1, lineHeight:1.4}}>{r.topic}</span>
+            </div>
+          ))}
+        </div>
+      </details>
+      <textarea id="cycle-copy-area" readOnly value="" style={{position:"absolute", left:"-9999px", top:0}}/>
+    </div>
+  );
+}
+
 export default function AppB(){
   const [tab, setTab] = useState("quiz");
   const [cat, setCat] = useState("すべて");
@@ -1018,7 +1100,7 @@ export default function AppB(){
     // 「今の周回」の集計(allHistory/catStats)には含めない。
     if(!isWeakSession){
       setAllHistory(h=>{
-        const updatedHistory=[...h,{cat:q.cat,topic:q.topic,correct:ok}];
+        const updatedHistory=[...h,{id:q.id,cat:q.cat,topic:q.topic,correct:ok}];
         setCatStats(prev=>{
           const cur=prev[q.cat]||{ok:0,total:0};
           const updatedStats={...prev,[q.cat]:{ok:cur.ok+(ok?1:0),total:cur.total+1}};
@@ -1358,6 +1440,7 @@ export default function AppB(){
                 </div>
               ))}
             </div>
+            <CycleProgressBox title="FE科目B" questions={ALL_QUESTIONS} history={allHistory} usedIds={usedIds}/>
             {Object.keys(cycleStats.byCat).length>0 && <>
               <div style={s.sectionTitle}>分野別 正解率（今の周回・{ALL_QUESTIONS.length}問を1周する間ずっと蓄積）</div>
               {Object.entries(cycleStats.byCat)
