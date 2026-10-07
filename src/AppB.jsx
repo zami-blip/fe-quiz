@@ -752,6 +752,84 @@ const ALL_QUESTIONS = [
     ],
     "correct": "エ",
     "hint": "正解理由: 最後の再帰でrを縮めないため、l=1,r=3でb≠aとなりfalseを返す。左右を同時に内側へ進めるisPal(s, l+1, r-1)が正しい。間違いやすいポイント: 終了条件の誤りと思い込む、再帰の方向を外側(l-1, r+1)にする。覚え方: 回文判定は左を+1、右を-1して範囲を狭める。"
+  },
+  {
+    "id": 26,
+    "cat": "スタック・キュー",
+    "topic": "循環バッファの途中状態",
+    "q": "添字は0から始まる。要素数4の整数配列bufを循環バッファとして使う。bufの要素は全て0、変数head,tail,countは全て0で始める。\n○put(x)\n if (count = 4)\n  何もしない\n else\n  buf[tail] ← x\n  tail ← (tail + 1) mod 4\n  count ← count + 1\n endif\n○get()\n if (count = 0)\n  return -1\n endif\n v ← buf[head]\n head ← (head + 1) mod 4\n count ← count - 1\n return v\n次の順に実行した。\nput(5), put(7), put(2), get(), put(9), put(4), put(6), get(), put(8)\n全て実行した後のbuf[0], buf[1], buf[2], buf[3]はどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "4, 8, 2, 9"
+      },
+      {
+        "label": "イ",
+        "text": "4, 6, 8, 9"
+      },
+      {
+        "label": "ウ",
+        "text": "5, 8, 2, 9"
+      },
+      {
+        "label": "エ",
+        "text": "4, 7, 2, 9"
+      }
+    ],
+    "correct": "ア",
+    "hint": "正解理由: put(5,7,2)でbuf[0..2]、get()で5を取り出しhead=1、put(9)でbuf[3]、put(4)でtailが0に戻りbuf[0]=4(count=4で満杯)。put(6)は満杯のため無視され、get()で7を取り出し、put(8)がbuf[1]=8に入る。 間違いやすいポイント: put(6)が満杯で無視されることを見落とすとbuf[1]=6, buf[2]=8となり「4, 6, 8, 9」になる(同等ロジックで実行して確認)。取り出した要素は消えずに残るだけで、tailが回ってきたときに上書きされる。 覚え方: 循環バッファはhead(取出し位置)とtail(書込み位置)をmodで回し、countで満杯・空を判定する。"
+  },
+  {
+    "id": 27,
+    "cat": "再帰処理",
+    "topic": "ユークリッドの互除法(再帰の空欄補充)",
+    "q": "2つの正の整数の最大公約数を再帰で求める。a mod b は a を b で割った余りである。\n○整数型: gcd(整数型: a, 整数型: b)\n if (b = 0)\n  return a\n else\n  return gcd( □ )\n endif\ngcd(84, 36) が12を返して終了するために、□に入れる実引数はどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "a mod b, b"
+      },
+      {
+        "label": "イ",
+        "text": "b, a mod b"
+      },
+      {
+        "label": "ウ",
+        "text": "a - b, b"
+      },
+      {
+        "label": "エ",
+        "text": "b, a div b"
+      }
+    ],
+    "correct": "イ",
+    "hint": "正解理由: gcd(84,36)→gcd(36,12)→gcd(12,0)となり、b=0で12を返す。つまり実引数は(b, a mod b)。 間違いやすいポイント: (a mod b, b)は引数の順が逆でgcd(12,36)→gcd(12,36)...と同じ形に戻り終了しない。(a−b, b)はaが負になり終了しない。(b, a div b)は商を使うため結果が12にならない。 覚え方: 再帰は『問題を小さくする』『終了条件(b=0)に近づく』の2点を確認する。"
+  },
+  {
+    "id": 28,
+    "cat": "文字列処理",
+    "topic": "ランレングス圧縮のトレース",
+    "q": "添字は1から始まる。文字列sの同じ文字の連続を「文字＋連続個数」に圧縮する。nはsの長さで、andは左の条件が偽なら右の条件を評価しない。\nout ← \"\"\ni ← 1\nwhile (i <= n)\n c ← s[i]\n k ← 1\n while (i + k <= n and s[i + k] = c)\n  k ← k + 1\n endwhile\n out ← out + c + 個数を表す文字(k)\n i ← i + k\nendwhile\ns = \"wwwbbwwwwb\"(n=10)のとき、処理後のoutはどれか。",
+    "choices": [
+      {
+        "label": "ア",
+        "text": "w7b3"
+      },
+      {
+        "label": "イ",
+        "text": "w3b2w4b"
+      },
+      {
+        "label": "ウ",
+        "text": "w3b2w4b1"
+      },
+      {
+        "label": "エ",
+        "text": "w2b1w3b0"
+      }
+    ],
+    "correct": "ウ",
+    "hint": "正解理由: 先頭から連続を数え、www→w3、bb→b2、wwww→w4、b→b1(個数1も出力)。 間違いやすいポイント: 文字ごとの合計(w7b3)は連続でなく全体の集計。最後のbは個数1でも『b1』と出力される。内側のループは i+k がnを超えない範囲で比較する。 覚え方: 外側は『次の塊の先頭 i』、内側は『塊の長さ k』を進め、最後に i ← i + k で塊の分だけ飛ぶ。"
   }
 ];
 
