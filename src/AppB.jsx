@@ -1296,7 +1296,7 @@ export default function AppB(){
       <div style={s.container}>
         <header style={s.header}>
           <div style={s.h1}>FE 科目B Quiz</div>
-          <div style={s.sub}>基本情報技術者 — 本番寄り想定問題20問(アルゴリズム16+セキュリティ4)</div>
+          <div style={s.sub}>基本情報技術者 — 想定問題{ALL_QUESTIONS.length}問(疑似言語トレース＋セキュリティ)</div>
           <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:8}}>
             <a href="/" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>← 科目Aの問題を解く</a>
             <a href="/terms" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>用語フラッシュカード →</a>
@@ -1355,7 +1355,7 @@ export default function AppB(){
               </div>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
                 onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
-                🔄 問題をリセット（全25問に戻す）
+                🔄 問題をリセット（全{ALL_QUESTIONS.length}問に戻す）
               </button>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid #7f1d1d`,color:"#f87171",borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
                 onClick={()=>{
