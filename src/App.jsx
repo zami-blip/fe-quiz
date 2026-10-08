@@ -2628,9 +2628,9 @@ function CycleProgressBox({ title, questions, history, usedIds, target }){
     order.forEach(k => {
       lines.push("", `■ ${shortLabel[k]}`);
       if(groups[k].length === 0) lines.push("(なし)");
-      groups[k].forEach(r => lines.push(`問${r.id} ${r.topic}`));
+      groups[k].forEach(r => lines.push((k==="ok"||k==="ng") ? `問${r.id} ${r.topic}` : `問${r.id}`));
     });
-    if(groups.later.length > 0){ lines.push("", "■ 次周から参加"); groups.later.forEach(r => lines.push(`問${r.id} ${r.topic}`)); }
+    if(groups.later.length > 0){ lines.push("", "■ 次周から参加"); groups.later.forEach(r => lines.push(`問${r.id}`)); }
     return lines.join("\n");
   };
   const handleCopy = () => {
@@ -2666,7 +2666,7 @@ function CycleProgressBox({ title, questions, history, usedIds, target }){
             <div key={r.id} style={{display:"flex", gap:8, alignItems:"baseline", padding:"6px 0", borderBottom:`1px solid ${C.border}`, fontSize:12}}>
               <span style={{fontFamily:"monospace", color:C.muted, width:44, flexShrink:0}}>問{r.id}</span>
               <span style={{width:112, flexShrink:0, color:colorOf[r.st]}}>{PROG_LABEL[r.st]}</span>
-              <span style={{flex:1, lineHeight:1.4}}>{r.topic}</span>
+              <span style={{flex:1, lineHeight:1.4}}>{(r.st==="ok"||r.st==="ng") ? r.topic : ""}</span>
             </div>
           ))}
         </div>
@@ -3030,9 +3030,9 @@ export default function App(){
                 <div style={s.card}>
                   <div style={s.meta}>
                     <span style={{fontFamily:"monospace",fontSize:12,color:C.muted}}>{qIdx+1} / {questions.length}</span>
-                    <span style={s.catTag}>{q.cat}</span>
+                    {showFb && <span style={s.catTag}>{q.cat}</span>}
                   </div>
-                  <div style={s.qnum}>テーマ: {q.topic}</div>
+                  {showFb && <div style={s.qnum}>テーマ: {q.topic}</div>}
                   <div style={s.qtext}>{q.q}</div>
                   {q.image && (
                     <div style={{margin:"10px 0 16px",textAlign:"center"}}>
