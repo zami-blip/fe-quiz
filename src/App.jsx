@@ -1,4 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
+import { ensureSnapshot, logAnswer, startLogSession, newCycleId } from "./answerLog";
+import BackupBox from "./BackupBox";
 
 // localStorage管理
 const LS_TARGET = "fe_cycle_target"; // 今の周回の対象問題id(周回開始時点で固定。追加問題は次周から参加)
@@ -2960,6 +2962,8 @@ export default function App(){
   const [copied, setCopied] = useState(false);
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState("");
+  const [logError, setLogError] = useState("");
+  useEffect(()=>{ ensureSnapshot(); },[]);
 
   // 起動時にlocalStorageから進捗・履歴を復元
   useEffect(()=>{
@@ -3051,7 +3055,7 @@ export default function App(){
         const fresh = ALL_QUESTIONS.filter(q=>cat==="すべて"||q.cat===cat);
         picked = shuffle(fresh).slice(0,10);
         saveUsedIds(picked.map(q=>q.id));
-        saveTarget(ALL_QUESTIONS.map(q=>q.id)); // 新しい周回: その時点の全問題を対象に固定
+        saveTarget(ALL_QUESTIONS.map(q=>q.id)); newCycleId("A"); // 新しい周回: その時点の全問題を対象に固定
         // 全問題を1周し終えて新しい周回に入るため、今回の周回成績もリセットする
         setAllHistory([]); setCatStats({}); store.clearCycle();
       } else {
@@ -3065,6 +3069,7 @@ export default function App(){
       }
     }
 
+    startLogSession("A");
     setQuestions(picked);
     setAnswers(new Array(picked.length).fill(null));
     setQIdx(0); setChosen(null); setShowFb(false);
@@ -3077,6 +3082,8 @@ export default function App(){
     setChosen(choice); setShowFb(true);
     const q = questions[qIdx];
     const ok = choice.label===q.correct;
+    // 回答確定時に問題ID付きの1件を追記(通常・苦手優先とも。失敗は表示する)
+    { const lr = logAnswer("A",{question_id:q.id,selected_choice:choice.label,is_correct:ok,mode:isWeakSession?"weak":"normal"}); setLogError(lr.ok?"":(lr.error||"unknown")); }
     // 苦手優先モードは既出問題を意図的に何度も再出題する復習用モードのため、
     // 「今の周回(1周=全問題を重複なく1回ずつ)」の集計(allHistory/catStats)には含めない。
     // 含めてしまうと同じ問題が何度もカウントされ、分野の合計がその分野の
@@ -3202,6 +3209,7 @@ export default function App(){
         <header style={s.header}>
           <div style={s.h1}>FE 科目A Quiz</div>
           <div style={s.sub}>基本情報技術者 — 想定問題{ALL_QUESTIONS.length}問(全分野ミックス)</div>
+          {logError && <div style={{fontSize:11,color:C.red,marginTop:4}}>回答ログの保存に失敗しました: {logError}</div>}
           <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:8}}>
             <a href="/b" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>科目Bの問題を解く →</a>
             <a href="/terms" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>用語フラッシュカード →</a>
@@ -3259,7 +3267,7 @@ export default function App(){
                 </div>
               </div>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
-                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); saveTarget(null); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
+                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); saveTarget(null); newCycleId("A"); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
                 🔄 問題をリセット（全{ALL_QUESTIONS.length}問に戻す）
               </button>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid #7f1d1d`,color:"#f87171",borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
@@ -3500,6 +3508,7 @@ export default function App(){
               </>;
             })()}
             {totalAnswered===0 && savedSessions.length===0 && <div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"12px 0"}}>クイズに挑戦すると履歴が表示されます。</div>}
+            <BackupBox subject="A"/>
           </div>
         )}
       </div>
