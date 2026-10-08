@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 
 // localStorage管理
+const LS_TARGET = "fe_cycle_target"; // 今の周回の対象問題id(周回開始時点で固定。追加問題は次周から参加)
 const LS_USED = "fe_used_ids";
 const LS_SESSIONS = "fe_sessions";
 const LS_MISSED = "fe_missed";
@@ -95,6 +96,17 @@ const hasContentChanged = (stored, qs) => {
     if(p.cat !== null && p.cat !== c.cat) return true;
     return false;
   });
+};
+
+// 周回の対象固定: 周回の開始時点の問題idを保存し、途中で追加された問題は次の周回から参加させる。
+// target === null は「周回がまだ始まっていない」状態で、その時点の全問題が対象になる。
+const inCycleTarget = (target, id) => target === null || target.includes(id);
+const cycleBase = (qs, target, cat, used) => qs.filter(q => inCycleTarget(target, q.id) && (cat==="すべて"||q.cat===cat) && !used.includes(q.id));
+const resolveTarget = (rawStored, allIds, usedCount, contentChanged) => {
+  if(contentChanged || usedCount === 0) return null;
+  let tgt = null;
+  try{ const arr = rawStored ? JSON.parse(rawStored) : null; if(Array.isArray(arr)) tgt = arr.filter(id => allIds.includes(id)); }catch(e){}
+  return (tgt === null || tgt.length === 0) ? allIds : tgt;
 };
 
 const CATS = [
@@ -2579,7 +2591,7 @@ function ReviewCopyBox({ missedList, lifetimeByCat }){
 
 // 今の周回の問題別進捗(4分類)。missedListは使わず、allHistory(idつき)とusedIdsだけで判定する。
 // 旧形式の履歴(idなし)は問題idを推測せず「判定不能」として扱う。
-const classifyCycle = (qs, history, usedIds) => {
+const classifyCycle = (qs, history, usedIds, target) => {
   const byId = new Map();
   (history||[]).forEach(h => { if(h && h.id != null) byId.set(h.id, h); });
   const hasLegacy = (history||[]).some(h => h && h.id == null);
@@ -2589,32 +2601,36 @@ const classifyCycle = (qs, history, usedIds) => {
     let st;
     if(h) st = h.correct ? "ok" : "ng";
     else if(used.has(q.id)) st = hasLegacy ? "unk" : "pending";
+    else if(!inCycleTarget(target === undefined ? null : target, q.id)) st = "later";
     else st = "new";
     return { id:q.id, topic:q.topic, cat:q.cat, st };
   });
   return { rows, hasLegacy };
 };
-const PROG_LABEL = { ok:"✅ 正解", ng:"❌ 不正解", pending:"⏸ 出題済み・未回答", unk:"❔ 出題済み・判定不能(旧履歴)", new:"○ 未出題" };
+const PROG_LABEL = { later:"🔜 次周から参加", ok:"✅ 正解", ng:"❌ 不正解", pending:"⏸ 出題済み・未回答", unk:"❔ 出題済み・判定不能(旧履歴)", new:"○ 未出題" };
 const PROG_NOTE = "※この機能追加前に回答した問題は、問題IDが履歴に保存されていないため、正解・不正解・中断を問題単位では判定できません。次の周回から完全に判定できます。";
 
-function CycleProgressBox({ title, questions, history, usedIds }){
+function CycleProgressBox({ title, questions, history, usedIds, target }){
   const [copied, setCopied] = useState(false);
-  const { rows, hasLegacy } = classifyCycle(questions, history, usedIds);
-  const groups = { ok:[], ng:[], [hasLegacy?"unk":"pending"]:[], new:[] };
+  const { rows, hasLegacy } = classifyCycle(questions, history, usedIds, target);
+  const groups = { later:[], ok:[], ng:[], [hasLegacy?"unk":"pending"]:[], new:[] };
   rows.forEach(r => groups[r.st].push(r));
   const order = hasLegacy ? ["ok","ng","unk","new"] : ["ok","ng","pending","new"];
-  const colorOf = { ok:C.green, ng:C.red, pending:C.warn, unk:C.warn, new:C.muted };
-  const shortLabel = { ok:"正解", ng:"不正解", pending:"出題済み・未回答", unk:"出題済み・判定不能", new:"未出題" };
+  const colorOf = { later:C.muted, ok:C.green, ng:C.red, pending:C.warn, unk:C.warn, new:C.muted };
+  const shortLabel = { later:"次周から参加", ok:"正解", ng:"不正解", pending:"出題済み・未回答", unk:"出題済み・判定不能", new:"未出題" };
 
   const buildText = () => {
-    const lines = [`📊 ${title} 今の周回 進捗`, "", `全${questions.length}問`];
+    const total = questions.length - groups.later.length;
+    const lines = [`📊 ${title} 今の周回 進捗`, "", `全${total}問`];
     order.forEach(k => lines.push(`${shortLabel[k]}: ${groups[k].length}問`));
+    if(groups.later.length > 0) lines.push(`次周から参加(追加分): ${groups.later.length}問`);
     if(hasLegacy){ lines.push("", "※機能追加前の回答履歴には問題IDがないため、", "一部は正解・不正解・中断を問題単位で判定できません。"); }
     order.forEach(k => {
       lines.push("", `■ ${shortLabel[k]}`);
       if(groups[k].length === 0) lines.push("(なし)");
       groups[k].forEach(r => lines.push(`問${r.id} ${r.topic}`));
     });
+    if(groups.later.length > 0){ lines.push("", "■ 次周から参加"); groups.later.forEach(r => lines.push(`問${r.id} ${r.topic}`)); }
     return lines.join("\n");
   };
   const handleCopy = () => {
@@ -2629,7 +2645,7 @@ function CycleProgressBox({ title, questions, history, usedIds }){
 
   return(
     <div style={{background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:14, marginBottom:16}}>
-      <div style={{fontSize:13, fontWeight:600, marginBottom:10}}>今の周回の問題別進捗（全{questions.length}問）</div>
+      <div style={{fontSize:13, fontWeight:600, marginBottom:10}}>今の周回の問題別進捗（全{questions.length - groups.later.length}問）</div>
       <div style={{display:"flex", gap:6, marginBottom:10}}>
         {order.map(k=>(
           <div key={k} style={{flex:1, background:C.surface2, border:`1px solid ${C.border}`, borderRadius:8, padding:"8px 4px", textAlign:"center"}}>
@@ -2638,6 +2654,7 @@ function CycleProgressBox({ title, questions, history, usedIds }){
           </div>
         ))}
       </div>
+      {groups.later.length > 0 && <div style={{fontSize:11, color:C.muted, lineHeight:1.6, marginBottom:10}}>追加された{groups.later.length}問は、この周回が終わってから参加します。</div>}
       {hasLegacy && <div style={{fontSize:11, color:C.warn, lineHeight:1.6, marginBottom:10}}>{PROG_NOTE}</div>}
       <div style={{display:"flex", justifyContent:"flex-end", marginBottom:8}}>
         <button style={s.copyBtn(copied)} onClick={handleCopy}>{copied ? "✓ コピーしました" : "今の周回の進捗をコピー"}</button>
@@ -2666,6 +2683,7 @@ export default function App(){
   const [weakIds, setWeakIds] = useState([]);
   const [phase, setPhase] = useState("idle");
   const [usedIds, setUsedIds] = useState([]);
+  const [cycleTarget, setCycleTarget] = useState(null); // null=周回未開始(全問が対象)
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState([]);
   const [qIdx, setQIdx] = useState(0);
@@ -2697,14 +2715,22 @@ export default function App(){
         localStorage.removeItem(LS_USED);
         localStorage.removeItem(LS_CYCLE);
         localStorage.removeItem(LS_MISSED);
+        localStorage.removeItem(LS_TARGET);
       }catch(e){}
     }
     try{ localStorage.setItem(LS_QVERSION, currentSignature); }catch(e){}
 
     const ids = contentChanged ? [] : store.loadIds().filter(id => ALL_QUESTIONS.some(q=>q.id===id));
+    const allIds = ALL_QUESTIONS.map(q=>q.id);
+    let rawTarget = null;
+    try{ rawTarget = localStorage.getItem(LS_TARGET); }catch(e){}
+    const tgt = resolveTarget(rawTarget, allIds, ids.length, contentChanged);
+    setCycleTarget(tgt);
+    try{ if(tgt === null) localStorage.removeItem(LS_TARGET); else localStorage.setItem(LS_TARGET, JSON.stringify(tgt)); }catch(e){}
     if(ids.length > 0){
       setUsedIds(ids);
-      setProgressError(`✓ 今の周回で${ids.length}問に解答済み（残り${ALL_QUESTIONS.length-ids.length}問／全${ALL_QUESTIONS.length}問）`);
+      const tot = tgt ? tgt.length : ALL_QUESTIONS.length;
+      setProgressError(`✓ 今の周回で${ids.length}問に解答済み（残り${tot-ids.length}問／全${tot}問）`);
     } else if(contentChanged){
       setProgressError(`問題の内容が更新されました。周回・復習リストを初期化しました（累計成績は引き続き保持されています）。`);
     }
@@ -2731,20 +2757,20 @@ export default function App(){
   },[]); // eslint-disable-line
 
   // 残り問題数(分野フィルタ適用後)
-  const available = ALL_QUESTIONS.filter(q=>{
-    const catOk = cat==="すべて" || q.cat===cat;
-    const notUsed = !usedIds.includes(q.id);
-    return catOk && notUsed;
-  });
+  const available = cycleBase(ALL_QUESTIONS, cycleTarget, cat, usedIds);
   // 分子(available.length)と同じ母集団で揃えた分母。
   // 従来はここが常にALL_QUESTIONS.length(全100問)固定だったため、
   // 分野を絞ると「1問/100問中」のように分子分母の母集団が食い違って表示され、
   // 全体の周回進捗(今の周回で30問に解答済み等)と矛盾しているように見える不具合があった。
-  const catTotal = cat==="すべて" ? ALL_QUESTIONS.length : ALL_QUESTIONS.filter(q=>q.cat===cat).length;
+  const catTotal = ALL_QUESTIONS.filter(q => inCycleTarget(cycleTarget, q.id) && (cat==="すべて" || q.cat===cat)).length;
 
   const saveUsedIds = useCallback((ids)=>{
     setUsedIds(ids);
     store.saveIds(ids);
+  },[]);
+  const saveTarget = useCallback((ids)=>{
+    setCycleTarget(ids);
+    try{ if(ids === null) localStorage.removeItem(LS_TARGET); else localStorage.setItem(LS_TARGET, JSON.stringify(ids)); }catch(e){}
   },[]);
 
   const startSession = useCallback(async()=>{
@@ -2755,16 +2781,17 @@ export default function App(){
     if(usingWeak){
       // 苦手優先：間違えた問題IDから優先出題
       const weakInAll = ALL_QUESTIONS.filter(q => weakIds.includes(q.id));
-      const others = ALL_QUESTIONS.filter(q => !weakIds.includes(q.id) && (cat==="すべて" || q.cat===cat));
+      const others = ALL_QUESTIONS.filter(q => inCycleTarget(cycleTarget, q.id) && !weakIds.includes(q.id) && (cat==="すべて" || q.cat===cat));
       const shuffledWeak = shuffle(weakInAll).slice(0, Math.min(10, weakInAll.length));
       const rest = shuffle(others).slice(0, Math.max(0, 10 - shuffledWeak.length));
       picked = shuffle([...shuffledWeak, ...rest]).slice(0, 10);
     } else {
-      const base = ALL_QUESTIONS.filter(q=>(cat==="すべて"||q.cat===cat) && !usedIds.includes(q.id));
+      const base = cycleBase(ALL_QUESTIONS, cycleTarget, cat, usedIds);
       if(base.length === 0){
         const fresh = ALL_QUESTIONS.filter(q=>cat==="すべて"||q.cat===cat);
         picked = shuffle(fresh).slice(0,10);
         saveUsedIds(picked.map(q=>q.id));
+        saveTarget(ALL_QUESTIONS.map(q=>q.id)); // 新しい周回: その時点の全問題を対象に固定
         // 全問題を1周し終えて新しい周回に入るため、今回の周回成績もリセットする
         setAllHistory([]); setCatStats({}); store.clearCycle();
       } else {
@@ -2774,6 +2801,7 @@ export default function App(){
         const sessionSize = Math.min(10, base.length);
         picked = shuffle(base).slice(0, sessionSize);
         saveUsedIds([...usedIds, ...picked.map(q=>q.id)]);
+        if(cycleTarget === null) saveTarget(ALL_QUESTIONS.map(q=>q.id)); // 周回の開始: 対象を固定
       }
     }
 
@@ -2782,7 +2810,7 @@ export default function App(){
     setQIdx(0); setChosen(null); setShowFb(false);
     setAnalysis(""); setCopyText(""); setCopied(false);
     setPhase("question");
-  },[cat, usedIds, weakMode, weakIds, saveUsedIds]);
+  },[cat, usedIds, cycleTarget, weakMode, weakIds, saveUsedIds, saveTarget]);
 
   const handleAnswer = useCallback((choice)=>{
     if(showFb) return;
@@ -2971,7 +2999,7 @@ export default function App(){
                 </div>
               </div>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
-                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
+                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); saveTarget(null); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
                 🔄 問題をリセット（全{ALL_QUESTIONS.length}問に戻す）
               </button>
               <button style={{width:"100%",padding:9,background:"none",border:`1px solid #7f1d1d`,color:"#f87171",borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
@@ -2980,6 +3008,7 @@ export default function App(){
                   if(!window.confirm("最終確認です。累計解答数・正解率など、これまでの記録は全て消えます。本当に実行しますか？")) return;
                   try{
                     localStorage.removeItem(LS_USED);
+                    localStorage.removeItem(LS_TARGET);
                     localStorage.removeItem(LS_SESSIONS);
                     localStorage.removeItem(LS_MISSED);
                     localStorage.removeItem(LS_LIFETIME);
@@ -3139,7 +3168,7 @@ export default function App(){
                 </div>
               ))}
             </div>
-            <CycleProgressBox title="FE科目A" questions={ALL_QUESTIONS} history={allHistory} usedIds={usedIds}/>
+            <CycleProgressBox title="FE科目A" questions={ALL_QUESTIONS} history={allHistory} usedIds={usedIds} target={cycleTarget}/>
             {Object.keys(cycleStats.byCat).length>0 && <>
               <div style={s.sectionTitle}>分野別 正解率（今の周回・{ALL_QUESTIONS.length}問を1周する間ずっと蓄積）</div>
               {Object.entries(cycleStats.byCat)
