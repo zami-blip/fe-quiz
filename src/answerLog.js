@@ -62,6 +62,20 @@ export function cycleId(subject) {
 export function newCycleId(subject) {
   try { const id = "cy-" + isoWithTz().slice(0, 19).replace(/[-:T]/g, ""); localStorage.setItem(SUBJ[subject].cycle, id); return id; } catch (e) { return "cy-unknown"; }
 }
+// GPT分析用テキストの生成のための読取専用の取得(何も書き込まない)。
+const LEGACY_KEYS = { A: { cycle: "fe_cycle", missed: "fe_missed" }, B: { cycle: "feb_cycle", missed: "feb_missed" } };
+export function readForExport(subject) {
+  const cy = readJson(LEGACY_KEYS[subject].cycle, { history: [] });
+  const missed = readJson(LEGACY_KEYS[subject].missed, []);
+  let currentCycleId = null;
+  try { currentCycleId = localStorage.getItem(SUBJ[subject].cycle); } catch (e) {}
+  return {
+    log: loadLog(subject),
+    cycleHistory: Array.isArray(cy && cy.history) ? cy.history.map(h => ({ id: h.id, correct: !!h.correct })) : [],
+    missedIds: Array.isArray(missed) ? missed.map(q => q && q.id).filter(id => id !== undefined && id !== null) : [],
+    currentCycleId,
+  };
+}
 export function startLogSession(subject) { sessionIds[subject] = "s-" + uid(); return sessionIds[subject]; }
 export function loadLog(subject) { return readJson(SUBJ[subject].log, []); }
 // 回答を確定した時点で1件追記する。失敗は握りつぶさず {ok:false,error} で返す。

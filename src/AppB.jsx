@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { ensureSnapshot, logAnswer, startLogSession, newCycleId } from "./answerLog";
 import BackupBox from "./BackupBox";
+import GptExportBox from "./GptExportBox";
 
 // localStorage管理
 const LS_TARGET = "feb_cycle_target"; // 今の周回の対象問題id(周回開始時点で固定。追加問題は次周から参加)
@@ -1567,6 +1568,9 @@ export default function AppB(){
                 <button style={s.btn()} onClick={startSession}>もう一度</button>
                 <button style={s.btn(C.accent,true)} onClick={resetSession}>設定に戻る</button>
               </div>
+              <div style={{textAlign:"left",marginBottom:16}}>
+                <GptExportBox subject="B" questions={ALL_QUESTIONS} defaultScope="wrong" defaultRange="session"/>
+              </div>
               <div style={{textAlign:"left"}}>
                 <div style={s.sectionTitle}>AI 学習分析</div>
                 {analysis?(
@@ -1705,6 +1709,7 @@ export default function AppB(){
               </>;
             })()}
             {totalAnswered===0 && savedSessions.length===0 && <div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"12px 0"}}>クイズに挑戦すると履歴が表示されます。</div>}
+            <GptExportBox subject="B" questions={ALL_QUESTIONS}/>
             <BackupBox subject="B"/>
           </div>
         )}
