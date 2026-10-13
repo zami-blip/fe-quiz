@@ -1717,11 +1717,13 @@ function CycleProgressBox({ title, questions, history, usedIds, target }){
   );
 }
 
+// 弱点優先(標準)モードの1セットの最大出題数。1日のノルマではない。
+const SET_SIZE = 3;
+
 export default function AppB(){
   const [tab, setTab] = useState("quiz");
   const [cat, setCat] = useState("すべて");
-  const [weakMode, setWeakMode] = useState(false);
-  const [weakIds, setWeakIds] = useState([]);
+  const [weakMode, setWeakMode] = useState(true); // 標準＝弱点優先。false＝全問周回(任意)
   const [phase, setPhase] = useState("idle");
   const [usedIds, setUsedIds] = useState([]);
   const [cycleTarget, setCycleTarget] = useState(null); // null=周回未開始(全問が対象)
@@ -1741,6 +1743,7 @@ export default function AppB(){
   const [copied, setCopied] = useState(false);
   const [progressLoading, setProgressLoading] = useState(true);
   const [progressError, setProgressError] = useState("");
+  const [noWeakMsg, setNoWeakMsg] = useState(false);
   const [logError, setLogError] = useState("");
   useEffect(()=>{ ensureSnapshot(); },[]);
 
@@ -1772,8 +1775,6 @@ export default function AppB(){
     try{ if(tgt === null) localStorage.removeItem(LS_TARGET); else localStorage.setItem(LS_TARGET, JSON.stringify(tgt)); }catch(e){}
     if(ids.length > 0){
       setUsedIds(ids);
-      const tot = tgt ? tgt.length : ALL_QUESTIONS.length;
-      setProgressError(`✓ 今の周回で${ids.length}問に解答済み（残り${tot-ids.length}問／全${tot}問）`);
     } else if(contentChanged){
       setProgressError(`問題の分野構成が更新されました。周回・復習リストを初期化しました（累計成績は引き続き保持されています）。`);
     }
@@ -1799,10 +1800,6 @@ export default function AppB(){
     setProgressLoading(false);
   },[]); // eslint-disable-line
 
-  // 残り問題数(分野フィルタ適用後)
-  const available = cycleBase(ALL_QUESTIONS, cycleTarget, cat, usedIds);
-  // 分子と同じ母集団の分母(科目Aと同じ修正)
-  const catTotal = ALL_QUESTIONS.filter(q => inCycleTarget(cycleTarget, q.id) && (cat==="すべて" || q.cat===cat)).length;
 
   const saveUsedIds = useCallback((ids)=>{
     setUsedIds(ids);
@@ -1815,16 +1812,13 @@ export default function AppB(){
 
   const startSession = useCallback(async()=>{
     let picked = [];
-    const usingWeak = weakMode && weakIds.length > 0;
-    setIsWeakSession(usingWeak);
-
+    // 標準＝弱点優先(復習リストの問題のみ)。候補が無くても未回答問題などで自動補充しない。
+    const usingWeak = weakMode;
     if(usingWeak){
-      // 苦手優先：間違えた問題IDから優先出題
-      const weakInAll = ALL_QUESTIONS.filter(q => weakIds.includes(q.id));
-      const others = ALL_QUESTIONS.filter(q => inCycleTarget(cycleTarget, q.id) && !weakIds.includes(q.id) && (cat==="すべて" || q.cat===cat));
-      const shuffledWeak = shuffle(weakInAll).slice(0, Math.min(10, weakInAll.length));
-      const rest = shuffle(others).slice(0, Math.max(0, 10 - shuffledWeak.length));
-      picked = shuffle([...shuffledWeak, ...rest]).slice(0, 10);
+      const weakCand = [...new Set(missedList.map(q=>q.id))];
+      const pool = ALL_QUESTIONS.filter(q => weakCand.includes(q.id) && (cat==="すべて" || q.cat===cat));
+      if(pool.length === 0){ setNoWeakMsg(true); return; }
+      picked = shuffle(pool).slice(0, SET_SIZE);
     } else {
       const base = cycleBase(ALL_QUESTIONS, cycleTarget, cat, usedIds);
       if(base.length === 0){
@@ -1845,13 +1839,14 @@ export default function AppB(){
       }
     }
 
+    setIsWeakSession(usingWeak);
     startLogSession("B");
     setQuestions(picked);
     setAnswers(new Array(picked.length).fill(null));
     setQIdx(0); setChosen(null); setShowFb(false);
     setAnalysis(""); setCopyText(""); setCopied(false);
     setPhase("question");
-  },[cat, usedIds, cycleTarget, weakMode, weakIds, saveUsedIds, saveTarget]);
+  },[cat, usedIds, cycleTarget, weakMode, missedList, saveUsedIds, saveTarget]);
 
   const handleAnswer = useCallback((choice)=>{
     if(showFb) return;
@@ -1953,6 +1948,13 @@ export default function AppB(){
     finally{setPhase("score");}
   },[questions,answers,catStats]);
 
+  // 途中終了: 未回答の問題は誤答扱いにせず、全問周回の「使用済み」からも外して繰り越さない
+  const endSessionEarly = useCallback(()=>{
+    const unanswered = questions.filter((q,i)=>answers[i]===null).map(q=>q.id);
+    if(!isWeakSession && unanswered.length>0) saveUsedIds(usedIds.filter(id=>!unanswered.includes(id)));
+    setPhase("idle"); setAnalysis(""); setCopyText(""); setCopied(false);
+  },[questions,answers,isWeakSession,usedIds,saveUsedIds]);
+
   const resetSession = useCallback(()=>{setPhase("idle");setAnalysis("");setCopyText("");setCopied(false);},[]);
   const clearMissed = useCallback(()=>{ setMissedList([]); store.saveMissed([]); },[]);
 
@@ -1982,7 +1984,7 @@ export default function AppB(){
       <div style={s.container}>
         <header style={s.header}>
           <div style={s.h1}>FE 科目B Quiz</div>
-          <div style={s.sub}>基本情報技術者 — 想定問題{ALL_QUESTIONS.length}問(疑似言語トレース＋セキュリティ)</div>
+          <div style={s.sub}>基本情報技術者 — 科目B(疑似言語トレース＋セキュリティ)</div>
           {logError && <div style={{fontSize:11,color:C.red,marginTop:4}}>回答ログの保存に失敗しました: {logError}</div>}
           <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:8}}>
             <a href="/" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>← 科目Aの問題を解く</a>
@@ -1991,9 +1993,9 @@ export default function AppB(){
         </header>
 
         <div style={s.tabs}>
-          {["quiz","review","history"].map((t,i)=>(
+          {["quiz","review","history","admin"].map((t,i)=>(
             <button key={t} style={s.tabBtn(tab===t)} onClick={()=>{ setTab(t); if(t==="history") loadDbHistory(); }}>
-              {["クイズ",`復習${missedList.length>0?` (${missedList.length})`:""}`, "履歴・分析"][i]}
+              {["クイズ","復習","履歴・分析","管理"][i]}
             </button>
           ))}
         </div>
@@ -2007,9 +2009,8 @@ export default function AppB(){
                 </div>
               ) : (
                 <div style={{marginBottom:12,fontSize:13,color:C.muted}}>
-                  残り問題: <span style={s.stockBadge(available.length)}>{available.length}問</span>
-                  <span style={{fontSize:11,color:C.muted,marginLeft:8}}>/ {catTotal}問中{cat!=="すべて"?`（${cat}）`:""}</span>
-                  {progressError && <div style={{fontSize:11,color:progressError.startsWith("✓")?C.green:C.warn,marginTop:4}}>{progressError}</div>}
+                  {progressError && <div style={{fontSize:11,color:C.warn}}>{progressError}</div>}
+                  {noWeakMsg && <div style={{lineHeight:1.6}}>いま復習する問題はありません。新しい問題を解く場合は、下の「全問周回モード」を選んでください。</div>}
                 </div>
               )}
               <div style={{marginBottom:16}}>
@@ -2019,48 +2020,19 @@ export default function AppB(){
                 </div>
               </div>
               <button style={{...s.btn(),width:"100%"}} onClick={startSession}>
-                {weakMode ? "🎯 苦手優先モードでスタート" : `スタート（${Math.min(10, available.length===0?10:available.length)}問）`}
+                学習を始める
               </button>
-              {/* 苦手優先モード切替 */}
-              <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",background:weakMode?"rgba(63,185,80,.08)":"rgba(255,255,255,.03)",border:`1px solid ${weakMode?C.green:C.border}`,borderRadius:8,cursor:"pointer"}}
-                onClick={async()=>{
-                  const next = !weakMode;
-                  setWeakMode(next);
-                  if(next){
-                    // localStorageの復習リストから苦手IDを取得
-                    const ids = missedList.map(q=>q.id);
-                    setWeakIds([...new Set(ids)]);
-                  }
-                }}>
-                <div style={{width:36,height:20,background:weakMode?C.green:C.border,borderRadius:10,position:"relative",flexShrink:0,transition:"background .2s"}}>
-                  <div style={{width:16,height:16,background:"white",borderRadius:"50%",position:"absolute",top:2,left:weakMode?18:2,transition:"left .2s"}}/>
+              {/* 全問周回モード(任意)。標準は弱点優先 */}
+              <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10,padding:"10px 12px",background:!weakMode?"rgba(88,166,255,.08)":"rgba(255,255,255,.03)",border:`1px solid ${!weakMode?C.accent:C.border}`,borderRadius:8,cursor:"pointer"}}
+                onClick={()=>{ setWeakMode(!weakMode); setNoWeakMsg(false); }}>
+                <div style={{width:36,height:20,background:!weakMode?C.accent:C.border,borderRadius:10,position:"relative",flexShrink:0,transition:"background .2s"}}>
+                  <div style={{width:16,height:16,background:"white",borderRadius:"50%",position:"absolute",top:2,left:!weakMode?18:2,transition:"left .2s"}}/>
                 </div>
                 <div>
-                  <div style={{fontSize:13,color:weakMode?C.green:C.muted,fontWeight:weakMode?700:400}}>苦手優先モード</div>
-                  <div style={{fontSize:11,color:C.muted}}>{weakMode && weakIds.length>0 ? `${weakIds.length}問を優先出題` : "復習リストの問題を優先"}</div>
+                  <div style={{fontSize:13,color:!weakMode?C.accent:C.muted,fontWeight:!weakMode?700:400}}>全問周回モード（任意）</div>
+                  <div style={{fontSize:11,color:C.muted}}>{!weakMode ? "未解答の問題を順に出題" : "標準は弱点優先の復習"}</div>
                 </div>
               </div>
-              <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
-                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); saveTarget(null); newCycleId("B"); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
-                🔄 問題をリセット（全{ALL_QUESTIONS.length}問に戻す）
-              </button>
-              <button style={{width:"100%",padding:9,background:"none",border:`1px solid #7f1d1d`,color:"#f87171",borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
-                onClick={()=>{
-                  if(!window.confirm("累計成績・履歴・復習リストを含む全てのデータを完全に削除します。これまでの学習記録は元に戻せません。本当によろしいですか？")) return;
-                  if(!window.confirm("最終確認です。累計解答数・正解率など、これまでの記録は全て消えます。本当に実行しますか？")) return;
-                  try{
-                    localStorage.removeItem(LS_USED);
-                    localStorage.removeItem(LS_TARGET);
-                    localStorage.removeItem(LS_SESSIONS);
-                    localStorage.removeItem(LS_MISSED);
-                    localStorage.removeItem(LS_LIFETIME);
-                    localStorage.removeItem(LS_CYCLE);
-                    localStorage.removeItem(LS_QVERSION);
-                  }catch(e){}
-                  window.location.reload();
-                }}>
-                🗑️ 完全リセット（累計成績も含めて全データ削除）
-              </button>
             </div>
           )}
 
@@ -2072,6 +2044,7 @@ export default function AppB(){
                 <div style={s.card}>
                   <div style={s.meta}>
                     <span style={{fontFamily:"monospace",fontSize:12,color:C.muted}}>{qIdx+1} / {questions.length}</span>
+                    <button style={{background:"none",border:"none",color:C.muted,fontSize:12,cursor:"pointer",fontFamily:"inherit"}} onClick={endSessionEarly}>終了</button>
                     {showFb && <span style={s.catTag}>{q.cat}</span>}
                   </div>
                   {showFb && <div style={s.qnum}>テーマ: {q.topic}</div>}
@@ -2199,6 +2172,64 @@ export default function AppB(){
           </div>
         )}
 
+        {tab==="admin" && (()=>{
+          // 管理画面: 総数・周回進捗はここだけに表示する(学習画面には出さない)。数値は登録データから動的に算出
+          const allAvail = cycleBase(ALL_QUESTIONS, cycleTarget, "すべて", usedIds);
+          const tgtN = cycleTarget ? cycleTarget.length : ALL_QUESTIONS.length;
+          const doneN = usedIds.filter(id => inCycleTarget(cycleTarget, id)).length;
+          const weakN = new Set(missedList.map(q=>q.id)).size;
+          const box=(l,v,color)=>(
+            <div key={l} style={s.statBox}>
+              <div style={{...s.statNum,color:color||C.accent}}>{v}</div>
+              <div style={s.statLabel}>{l}</div>
+            </div>
+          );
+          return(
+            <div>
+              <div style={s.sectionTitle}>問題バンク</div>
+              <div style={{display:"flex",gap:8,marginBottom:18}}>
+                {box("総問題数",ALL_QUESTIONS.length)}
+                {box("復習リスト",weakN,C.warn)}
+              </div>
+              <div style={s.sectionTitle}>全問周回（任意）</div>
+              <div style={{display:"flex",gap:8,marginBottom:8}}>
+                {box("対象数",tgtN)}
+                {box("解答済み",doneN,C.green)}
+                {box("残り",allAvail.length,C.muted)}
+              </div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.6}}>
+                {allAvail.length===0 && usedIds.length>0 ? "今の周回は完了しています。再開すると新しい周回を始めます。" : "全問周回は任意です。終わらせる必要はありません。"}
+              </div>
+              <button style={{...s.btn(),width:"100%",marginBottom:12}} onClick={()=>{ setWeakMode(false); setNoWeakMsg(false); setTab("quiz"); }}>
+                全問周回を始める／再開する
+              </button>
+              <CycleProgressBox title="FE科目B" questions={ALL_QUESTIONS} history={allHistory} usedIds={usedIds} target={cycleTarget}/>
+              <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
+                onClick={()=>{ if(window.confirm("使用済み問題をリセットして全問を出題可能にします。今回の周回成績もリセットされます。よろしいですか？")){ saveUsedIds([]); saveTarget(null); newCycleId("B"); setAllHistory([]); setCatStats({}); store.clearCycle(); } }}>
+                🔄 問題をリセット（全{ALL_QUESTIONS.length}問に戻す）
+              </button>
+              <button style={{width:"100%",padding:9,background:"none",border:`1px solid #7f1d1d`,color:"#f87171",borderRadius:8,fontFamily:"inherit",fontSize:12,cursor:"pointer",marginTop:8}}
+                onClick={()=>{
+                  if(!window.confirm("累計成績・履歴・復習リストを含む全てのデータを完全に削除します。これまでの学習記録は元に戻せません。本当によろしいですか？")) return;
+                  if(!window.confirm("最終確認です。累計解答数・正解率など、これまでの記録は全て消えます。本当に実行しますか？")) return;
+                  try{
+                    localStorage.removeItem(LS_USED);
+                    localStorage.removeItem(LS_TARGET);
+                    localStorage.removeItem(LS_SESSIONS);
+                    localStorage.removeItem(LS_MISSED);
+                    localStorage.removeItem(LS_LIFETIME);
+                    localStorage.removeItem(LS_CYCLE);
+                    localStorage.removeItem(LS_QVERSION);
+                  }catch(e){}
+                  window.location.reload();
+                }}>
+                🗑️ 完全リセット（累計成績も含めて全データ削除）
+              </button>
+              <BackupBox subject="B"/>
+            </div>
+          );
+        })()}
+
         {tab==="history" && (
           <div>
             <div style={{display:"flex",gap:8,marginBottom:18}}>
@@ -2209,9 +2240,8 @@ export default function AppB(){
                 </div>
               ))}
             </div>
-            <CycleProgressBox title="FE科目B" questions={ALL_QUESTIONS} history={allHistory} usedIds={usedIds} target={cycleTarget}/>
             {Object.keys(cycleStats.byCat).length>0 && <>
-              <div style={s.sectionTitle}>分野別 正解率（今の周回・{ALL_QUESTIONS.length}問を1周する間ずっと蓄積）</div>
+              <div style={s.sectionTitle}>分野別 正解率（今の周回）</div>
               {Object.entries(cycleStats.byCat)
                 .map(([c,st])=>({c,pct:Math.round(st.ok/st.total*100),ok:st.ok,total:st.total}))
                 .sort((a,b)=>a.pct-b.pct)
@@ -2282,7 +2312,6 @@ export default function AppB(){
             })()}
             {totalAnswered===0 && savedSessions.length===0 && <div style={{textAlign:"center",color:C.muted,fontSize:13,padding:"12px 0"}}>クイズに挑戦すると履歴が表示されます。</div>}
             <GptExportBox subject="B" questions={ALL_QUESTIONS}/>
-            <BackupBox subject="B"/>
           </div>
         )}
       </div>
