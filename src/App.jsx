@@ -2,6 +2,8 @@ import React, { useState, useCallback, useEffect } from "react";
 import { ensureSnapshot, logAnswer, startLogSession, newCycleId } from "./answerLog";
 import BackupBox from "./BackupBox";
 import GptExportBox from "./GptExportBox";
+import StudyPanel, { FlagButtons } from "./StudyPanel";
+import { planStudy, recordShown, refreshLegacy } from "./studyStore";
 
 // localStorage管理
 const LS_TARGET = "fe_cycle_target"; // 今の周回の対象問題id(周回開始時点で固定。追加問題は次周から参加)
@@ -5123,8 +5125,6 @@ function CycleProgressBox({ title, questions, history, usedIds, target }){
   );
 }
 
-// 弱点優先(標準)モードの1セットの最大出題数。1日のノルマではない。
-const SET_SIZE = 5;
 
 export default function App(){
   const [tab, setTab] = useState("quiz");
@@ -5151,7 +5151,8 @@ export default function App(){
   const [progressError, setProgressError] = useState("");
   const [noWeakMsg, setNoWeakMsg] = useState(false);
   const [logError, setLogError] = useState("");
-  useEffect(()=>{ ensureSnapshot(); },[]);
+  const [planInfo, setPlanInfo] = useState(null); // 今回の出題内訳・不足表示(問題数の総数は出さない)
+  useEffect(()=>{ ensureSnapshot(); refreshLegacy("A"); },[]);
 
   // 起動時にlocalStorageから進捗・履歴を復元
   useEffect(()=>{
@@ -5218,13 +5219,14 @@ export default function App(){
 
   const startSession = useCallback(async()=>{
     let picked = [];
-    // 標準＝弱点優先(復習リストの問題のみ)。候補が無くても未回答問題などで自動補充しない。
+    // 標準＝問題ID単位の出題制御(復習約2/3＋未回答約1/3、重複なし、直近は後回し)。studySelect.js 参照
     const usingWeak = weakMode;
     if(usingWeak){
-      const weakCand = [...new Set(missedList.map(q=>q.id))];
-      const pool = ALL_QUESTIONS.filter(q => weakCand.includes(q.id) && (cat==="すべて" || q.cat===cat));
-      if(pool.length === 0){ setNoWeakMsg(true); return; }
-      picked = shuffle(pool).slice(0, SET_SIZE);
+      const plan = planStudy("A", ALL_QUESTIONS, cat);
+      setPlanInfo(plan);
+      if(plan.picks.length === 0){ setNoWeakMsg(true); return; }
+      picked = plan.picks.map(p => ALL_QUESTIONS.find(q => q.id === p.id)).filter(Boolean);
+      recordShown("A", plan);
     } else {
       const base = cycleBase(ALL_QUESTIONS, cycleTarget, cat, usedIds);
       if(base.length === 0){
@@ -5252,7 +5254,7 @@ export default function App(){
     setQIdx(0); setChosen(null); setShowFb(false);
     setAnalysis(""); setCopyText(""); setCopied(false);
     setPhase("question");
-  },[cat, usedIds, cycleTarget, weakMode, missedList, saveUsedIds, saveTarget]);
+  },[cat, usedIds, cycleTarget, weakMode, saveUsedIds, saveTarget]);
 
   const handleAnswer = useCallback((choice)=>{
     if(showFb) return;
@@ -5364,7 +5366,11 @@ export default function App(){
   },[questions,answers,isWeakSession,usedIds,saveUsedIds]);
 
   const resetSession = useCallback(()=>{setPhase("idle");setAnalysis("");setCopyText("");setCopied(false);},[]);
-  const clearMissed = useCallback(()=>{ setMissedList([]); store.saveMissed([]); },[]);
+  const clearMissed = useCallback(()=>{
+    if(!window.confirm("「復習タブの一覧」だけを空にします。\n消えるもの: この一覧の表示(旧・復習リスト登録)\n消えないもの: 回答履歴、誤答回数、再確認状態、理解不足/保留の設定、誤答経験の記録\n\n実行しますか？")) return;
+    refreshLegacy("A"); // 誤答経験の事実を退避してから一覧を空にする
+    setMissedList([]); store.saveMissed([]);
+  },[]);
 
   // 「今の周回」の集計はallHistory(今の周回で回答した{cat,correct}の記録)から
   // 毎回計算し直す。allHistoryはusedIdsと必ず同じタイミングでリセットされるため
@@ -5418,7 +5424,7 @@ export default function App(){
               ) : (
                 <div style={{marginBottom:12,fontSize:13,color:C.muted}}>
                   {progressError && <div style={{fontSize:11,color:C.warn}}>{progressError}</div>}
-                  {noWeakMsg && <div style={{lineHeight:1.6}}>いま復習する問題はありません。新しい問題を解く場合は、下の「全問周回モード」を選んでください。</div>}
+                  {noWeakMsg && <div style={{lineHeight:1.6}}>出題できる問題がありません（保留を解除するか、全問周回モードを使ってください）。</div>}
                 </div>
               )}
               <div style={{marginBottom:16}}>
@@ -5444,6 +5450,12 @@ export default function App(){
             </div>
           )}
 
+          {phase==="question" && planInfo && weakMode && (
+            <div style={{fontSize:11,color:C.muted,marginBottom:8,lineHeight:1.6}}>
+              今回の内訳: 復習 {planInfo.breakdown["復習"]} / 未回答 {planInfo.breakdown["未回答"]} / 再確認 {planInfo.breakdown["再確認"]}
+              {planInfo.notes.map((n,i)=><div key={i} style={{color:C.warn}}>{n}</div>)}
+            </div>
+          )}
           {phase==="question" && questions[qIdx] && (()=>{
             const q=questions[qIdx];
             return(
@@ -5485,6 +5497,7 @@ export default function App(){
                           </div>
                         )}
                       </div>
+                      <FlagButtons key={q.id} subject="A" id={q.id}/>
                       <button style={{...s.btn(),width:"100%",marginTop:14}} onClick={handleNext}>
                         {qIdx+1>=questions.length?"結果を見る":"次の問題 →"}
                       </button>
@@ -5561,7 +5574,7 @@ export default function App(){
               :<>
                 {/* コピーテキスト生成 */}
                 <ReviewCopyBox missedList={missedList} lifetimeByCat={lifetime.byCat||{}}/>
-                <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:13,cursor:"pointer",marginBottom:16}} onClick={clearMissed}>復習リストをクリア</button>
+                <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:13,cursor:"pointer",marginBottom:16}} onClick={clearMissed}>復習リストをクリア（一覧表示のみ。履歴は残ります）</button>
                 {missedList.map((q,i)=>{
                   const cc=q.choices.find(c=>c.label===q.correct);
                   return(
@@ -5598,6 +5611,7 @@ export default function App(){
           );
           return(
             <div>
+              <StudyPanel subject="A" allQuestions={ALL_QUESTIONS}/>
               <div style={s.sectionTitle}>問題バンク</div>
               <div style={{display:"flex",gap:8,marginBottom:18}}>
                 {box("総問題数",ALL_QUESTIONS.length)}
