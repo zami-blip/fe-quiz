@@ -181,3 +181,75 @@ test("L2: 状態計算・選出は履歴を改変しない", () => {
   recordShown("B", planStudy("B", qs, "すべて"));
   expect(JSON.stringify({ l: loadLog("B"), m: localStorage.getItem("feb_missed") })).toBe(before);
 });
+
+// ---- 独立レビュー指摘への対応 ----
+const settledEv = id => ev(id, true, day(20));                                       // 正解のみ(誤答歴なし)=settled
+const waitingEv = (id, d = 0.5) => [ev(id, false, day(d + 3)), ev(id, true, day(d))]; // 誤答歴+最新正解が間隔内=waiting
+const waitingIds = r => r.picks.filter(p => p.state === "waiting").map(p => p.id);
+
+test("W1: 補充は settled を優先し、waiting は出さない", () => {
+  const evs = [...[1, 2, 3].map(settledEv), ...[4, 5, 6].flatMap(id => waitingEv(id))];
+  // settled は最近出題済み(最終出題が waiting より新しい)でも、waiting より先に補充される
+  const r = run({ ids: range(1, 6), events: evs, shown: { last: { 1: NOW, 2: NOW, 3: NOW }, lastSession: [] } }, 3);
+  expect(r.picks.map(p => p.id).sort()).toEqual([1, 2, 3]);
+  expect(waitingIds(r)).toHaveLength(0);
+});
+test("W2: 直前セッションに出した settled でも、waiting より先に再提示される", () => {
+  const evs = [...[1, 2, 3].map(settledEv), ...[4, 5, 6].flatMap(id => waitingEv(id))];
+  const r = run({ ids: range(1, 6), events: evs, shown: { lastSession: [1, 2, 3], last: {} } }, 3);
+  expect(r.picks.map(p => p.id).sort()).toEqual([1, 2, 3]);
+});
+test("W3: 他に候補が無いときだけ waiting を最後の補充にし、理由と注意を明示、重複なし", () => {
+  const evs = [settledEv(1), ...[2, 3, 4].flatMap(id => waitingEv(id))];
+  const r = run({ ids: range(1, 4), events: evs }, 3);
+  expect(r.picks).toHaveLength(3);
+  expect(new Set(r.picks.map(p => p.id)).size).toBe(3);
+  expect(r.picks.find(p => p.id === 1).state).toBe("settled");
+  const w = r.picks.filter(p => p.state === "waiting");
+  expect(w).toHaveLength(2);
+  w.forEach(p => expect(p.reason).toMatch(/再確認期間内/));
+  expect(r.notes.join()).toMatch(/再確認期間内/);
+});
+test("W4: waiting を含まない通常の選出では注意表示が出ない", () => {
+  const r = run({ events: manyWrong }, 10);
+  expect(r.notes.join()).not.toMatch(/再確認期間内/);
+});
+
+// 優先順位(階層)と予約枠(再確認期)は別の仕組みとして検証する。選出内容は picks の kind/tier で判定し、表示順(ランダム)には依存しない。
+const tierEv = (id, t) => t === 1 ? [ev(id, false, day(6)), ev(id, false, day(5))]
+  : t === 2 ? [ev(id, true, day(6)), ev(id, false, day(5))] : [ev(id, false, day(5))];
+const mixedEvents = () => [
+  ...[1, 2].flatMap(id => tierEv(id, 1)), ...[3, 4].flatMap(id => tierEv(id, 2)), ...range(5, 14).flatMap(id => tierEv(id, 3)),
+  ...dueEvents([21, 22, 23]),
+];
+test("P1: 階層優先(1>2>3)は復習枠の中で守られる(A10: 復習6=階層1×2,階層2×2,階層3×2)", () => {
+  for (const seed of ["a", "b", "c", "d", "e"]) { // 表示順(seed依存)が変わっても選出内容は同じ
+    const r = run({ events: mixedEvents(), seed }, 10);
+    const rev = r.picks.filter(p => p.kind === "復習");
+    const byTier = t => rev.filter(p => p.tier === t).length;
+    expect([byTier(1), byTier(2), byTier(3)]).toEqual([2, 2, 2]);
+    expect(rev.filter(p => p.tier === 1).map(p => p.id).sort()).toEqual([1, 2]);
+    expect(rev.filter(p => p.tier === 2).map(p => p.id).sort()).toEqual([3, 4]);
+  }
+});
+test("P2: 予約枠は階層とは別枠(A10: 再確認1・未回答3・復習6、合計10)", () => {
+  const r = run({ events: mixedEvents() }, 10);
+  expect(r.breakdown).toEqual({ 復習: 6, 未回答: 3, 再確認: 1 });
+  expect(r.picks.filter(p => p.kind === "再確認").every(p => [21, 22, 23].includes(p.id))).toBe(true);
+});
+test("P3: B3(復習枠2) = 階層1の1問 + 再確認1問 + 未回答1問。階層2・3は予約枠に負けて出ない", () => {
+  const r = run({ events: mixedEvents() }, 3);
+  expect(r.breakdown).toEqual({ 復習: 1, 未回答: 1, 再確認: 1 });
+  const rev = r.picks.find(p => p.kind === "復習");
+  expect(rev.tier).toBe(1);
+});
+test("P4: 再確認期が無ければ予約枠は使われず、復習枠は全て階層順で埋まる", () => {
+  const evs = mixedEvents().filter(e => e.question_id < 21);
+  const r = run({ events: evs }, 10);
+  expect(r.breakdown).toEqual({ 復習: 7, 未回答: 3, 再確認: 0 });
+  expect(r.picks.filter(p => p.kind === "復習" && p.tier <= 2)).toHaveLength(4);
+});
+test("P5: 未回答の最低枠は階層・予約枠より優先して確保される", () => {
+  const r = run({ events: mixedEvents() }, 3);
+  expect(r.breakdown["未回答"]).toBe(1);
+});

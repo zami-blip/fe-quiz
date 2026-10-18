@@ -55,7 +55,7 @@ export function computeStatuses({ ids, events, legacy, flags, settings, now }) {
     if (n) { latestWrong = !latest.ok; latestCorrect = latest.ok; }
     else { latestWrong = lw.has(id); latestCorrect = !lw.has(id) && lc.has(id); }
     const lastAt = latest ? latest.t : 0;
-    let state, tier = null;
+    let state, tier = null, dueAt = 0;
     if (flag === "hold") state = "hold";
     else if (latestWrong) {
       state = "review";
@@ -63,10 +63,10 @@ export function computeStatuses({ ids, events, legacy, flags, settings, now }) {
     } else if (flag === "weak") { state = "review"; tier = 4; }
     else if (!hasHistory) state = "unanswered";
     else if (everWrong && latestCorrect) {
-      const dueAt = latest && latest.valid ? latest.t + st.recheckDays * DAY_MS : 0;
+      dueAt = latest && latest.valid ? latest.t + st.recheckDays * DAY_MS : 0;
       state = now >= dueAt ? "due" : "waiting";
     } else state = "settled";
-    out.set(id, { id, state, tier, answers: n, streak, hadCorrectBefore, everWrong, lastAt, flag, legacyOnly: n === 0 && hasHistory });
+    out.set(id, { id, state, tier, answers: n, streak, hadCorrectBefore, everWrong, lastAt, dueAt, flag, legacyOnly: n === 0 && hasHistory });
   });
   return out;
 }
@@ -103,7 +103,8 @@ export function selectSession({ ids, events, legacy, flags, settings, shown, now
   const R = ord(by("review"), true);
   const U = seededOrder(by("unanswered"), seed);
   const D = ord(by("due"), false);
-  const X = ord([...by("settled"), ...by("waiting")], false);
+  const X = ord(by("settled"), false);   // 正解のみ(誤答歴なし)の補充候補
+  const W = ord(by("waiting"), false);   // 再確認待ち(間隔内): 原則出さない。他に候補が無いときだけの最後の手段
 
   let nU = st.unansweredSlots != null ? Math.max(0, Math.floor(st.unansweredSlots)) : Math.round(size / 3);
   if (U.length > 0 && size >= 3) nU = Math.max(1, nU);
@@ -128,7 +129,8 @@ export function selectSession({ ids, events, legacy, flags, settings, shown, now
   const lblR = s => `復習(優先度${s.tier}: ${["", "連続誤答" + s.streak + "回", "正解後の誤答", "最新が誤答", "理解不足登録"][s.tier]})・最終出題 ${fmt(lastShown(s.id))}`;
   const lblU = () => "未回答";
   const lblD = s => `再確認(正解から${st.recheckDays}日経過)・最終出題 ${fmt(lastShown(s.id))}`;
-  const lblX = s => `再確認(${s.state === "waiting" ? "間隔内・不足補充" : "正解済み・不足補充"})・最終出題 ${fmt(lastShown(s.id))}`;
+  const lblX = s => `再確認(正解済み・不足補充)・最終出題 ${fmt(lastShown(s.id))}`;
+  const lblW = s => `再確認期間内(あと約${Math.max(0, Math.ceil((s.dueAt - now) / DAY_MS))}日で再確認期)・他に候補が無いため最終補充`;
 
   for (const allowRecent of [false, true]) {
     const base = picks.length;
@@ -150,6 +152,10 @@ export function selectSession({ ids, events, legacy, flags, settings, shown, now
     if (rest() > 0) take(X, rest(), "再確認", allowRecent, lblX);
     if (size - picks.length <= 0 || (allowRecent && picks.length === base)) break;
   }
+  // 最後の手段: 再確認待ち(間隔内)。settled・再提示を含む全ての通常候補を使い切った後にだけ補充する。
+  for (const allowRecent of [false, true]) {
+    if (size - picks.length > 0) take(W, size - picks.length, "再確認", allowRecent, lblW);
+  }
 
   // 表示順: 復習/未回答/再確認を交ぜる(選出枠は変えない)
   const mixed = seededOrder(picks, seed + "mix");
@@ -158,6 +164,7 @@ export function selectSession({ ids, events, legacy, flags, settings, shown, now
   const shortage = size - picks.length;
   const notes = [];
   if (shortage > 0) notes.push(`出題できる候補が足りないため、今回は${picks.length}問です(同じ問題の重複出題はしません)。`);
+  if (picks.some(p => p.state === "waiting")) notes.push("他に出せる問題が無いため、再確認期間内(まだ再確認の時期ではない)の問題を含みます。");
   if (picks.some(p => p.recentFallback)) notes.push("候補不足のため、直前のセッションで出した問題を含みます。");
   return { picks: mixed, breakdown, shortage, notes, size, nU, nR, counts: summarize(statuses) };
 }
