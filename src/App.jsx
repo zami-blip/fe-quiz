@@ -5367,7 +5367,7 @@ export default function App(){
 
   const resetSession = useCallback(()=>{setPhase("idle");setAnalysis("");setCopyText("");setCopied(false);},[]);
   const clearMissed = useCallback(()=>{
-    if(!window.confirm("「復習タブの一覧」だけを空にします。\n消えるもの: この一覧の表示(旧・復習リスト登録)\n消えないもの: 回答履歴、誤答回数、再確認状態、理解不足/保留の設定、誤答経験の記録\n\n実行しますか？")) return;
+    if(!window.confirm("【これは表示用の一覧を消す操作です】\n消えるもの: 復習タブに並んでいる一覧の表示だけ\n消えないもの: 回答履歴、誤答情報(誤答回数・誤答経験)、復習の出題候補、再確認状態、理解不足/保留の設定\n※復習の出題候補は回答履歴から計算されるため、クリアしても出題対象から外れません。出題から外したい場合は「保留」を使ってください。\n\n実行しますか？")) return;
     refreshLegacy("A"); // 誤答経験の事実を退避してから一覧を空にする
     setMissedList([]); store.saveMissed([]);
   },[]);
@@ -5574,7 +5574,8 @@ export default function App(){
               :<>
                 {/* コピーテキスト生成 */}
                 <ReviewCopyBox missedList={missedList} lifetimeByCat={lifetime.byCat||{}}/>
-                <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:13,cursor:"pointer",marginBottom:16}} onClick={clearMissed}>復習リストをクリア（一覧表示のみ。履歴は残ります）</button>
+                <button style={{width:"100%",padding:9,background:"none",border:`1px solid ${C.border}`,color:C.muted,borderRadius:8,fontFamily:"inherit",fontSize:13,cursor:"pointer",marginBottom:16}} onClick={clearMissed}>復習リストをクリア（表示用の一覧だけを消去）</button>
+                <div style={{fontSize:11,color:C.muted,marginTop:-8,marginBottom:16,lineHeight:1.6}}>※ 消えるのはこの一覧の表示のみです。出題履歴・誤答情報・復習の出題候補は消えません（出題から外すには「保留」）。</div>
                 {missedList.map((q,i)=>{
                   const cc=q.choices.find(c=>c.label===q.correct);
                   return(

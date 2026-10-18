@@ -121,3 +121,63 @@ test("手動の保留は出題から除外され、解除で戻る(履歴は残�
   setFlag("B", 1, null);
   expect(planStudy("B", qs, "すべて").picks).toHaveLength(2);
 });
+
+// ---- 追加改修(再確認期の予約枠・旧履歴遷移) ----
+const dueEvents = ids => ids.flatMap((id, i) => [ev(id, false, day(10 + i * 0.01)), ev(id, true, day(6 - i * 0.01))]); // 全て再確認期
+const R_ = (n) => (n)
+test("R1: 未回答が十分あっても再確認期が復習枠から選ばれる(B3/A10)", () => {
+  const evs = [...range(1, 20).map(i => ev(i, false, day(5))), ...dueEvents(range(21, 30))];
+  const b3 = run({ events: evs }, 3), a10 = run({ events: evs }, 10);
+  expect(kinds(b3)).toEqual({ 復習: 1, 未回答: 1, 再確認: 1 });
+  expect(a10.breakdown["未回答"]).toBe(3); expect(a10.breakdown["再確認"]).toBe(1); expect(a10.breakdown["復習"]).toBe(6);
+});
+test("R2: 誤答の優先順位は維持(最優先の連続誤答は再確認より先)", () => {
+  const evs = [ev(1, false, day(3)), ev(1, false, day(2)), ...range(2, 10).map(i => ev(i, false, day(5))), ...dueEvents(range(21, 30))];
+  const r = run({ events: evs }, 3);
+  expect(r.picks.find(p => p.id === 1).tier).toBe(1);
+});
+test("R3: 再確認期が多数でも固定されず、順番に巡回する(永久に後回しにしない)", () => {
+  const evs = [...range(1, 20).map(i => ev(i, false, day(5))), ...dueEvents(range(21, 30))];
+  const seen = new Set(); let shown = { last: {}, lastSession: [] };
+  for (let s = 0; s < 12; s++) {
+    const r = run({ events: evs, shown, seed: "k" + s }, 3);
+    r.picks.forEach(p => { if (p.kind === "再確認") seen.add(p.id); shown.last[p.id] = NOW + s; });
+    shown = { last: shown.last, lastSession: r.picks.map(p => p.id) };
+  }
+  expect(seen.size).toBeGreaterThanOrEqual(10);
+});
+test("R4: 再確認待ち(間隔内)は出さない / 未回答枠は維持 / 直前セッション抑制を維持", () => {
+  const waiting = range(21, 30).flatMap(id => [ev(id, false, day(2)), ev(id, true, day(0.3))]);
+  const evs = [...range(1, 20).map(i => ev(i, false, day(5))), ...waiting];
+  const r = run({ events: evs }, 10);
+  expect(r.picks.filter(p => p.id >= 21 && p.id <= 30)).toHaveLength(0);
+  expect(r.breakdown["未回答"]).toBe(3);
+  const d = dueEvents(range(21, 30));
+  const r1 = run({ events: [...range(1, 20).map(i => ev(i, false, day(5))), ...d] }, 3);
+  const r2 = run({ events: [...range(1, 20).map(i => ev(i, false, day(5))), ...d], shown: { lastSession: r1.picks.map(p => p.id), last: {} }, seed: "z" }, 3);
+  expect(r2.picks.filter(p => r1.picks.some(q => q.id === p.id))).toHaveLength(0);
+  expect(new Set(r2.picks.map(p => p.id)).size).toBe(r2.picks.length);
+});
+test("L1: 旧履歴のみ → 新しい回答で最新回答に基づく状態へ移行(正解/誤答/待ち/期/保留)", () => {
+  const st = (events, legacy, flags = {}) => computeStatuses({ ids: [1], events, legacy, flags, settings: { recheckDays: 2 }, now: NOW }).get(1);
+  const lw = { wrong: [1], correct: [] }, lc = { wrong: [], correct: [1] }, lwc = { wrong: [1], correct: [1] };
+  expect(st([], lw).state).toBe("review");                                   // 旧誤答のみ
+  expect(st([ev(1, true, day(0.5))], lw).state).toBe("waiting");              // 旧誤答 + 新正解(間隔内)
+  expect(st([ev(1, true, day(3))], lw).state).toBe("due");                    // 旧誤答 + 新正解(2日経過)
+  expect(st([ev(1, false, day(0.5))], lw)).toMatchObject({ state: "review", tier: 3 }); // 旧誤答 + 新誤答
+  expect(st([ev(1, false, day(0.5))], lc)).toMatchObject({ state: "review", tier: 2 }); // 旧正解 + 新誤答 = 正解後の誤答
+  expect(st([ev(1, true, day(0.5))], lc).state).toBe("settled");              // 旧正解 + 新正解
+  expect(st([ev(1, true, day(0.5))], lwc).state).toBe("waiting");             // 旧誤答/正解 + 新正解
+  expect(st([ev(1, false, day(2)), ev(1, false, day(1))], lc)).toMatchObject({ state: "review", tier: 1 });
+  expect(st([ev(1, true, day(0.5))], lw, { 1: { flag: "hold" } }).state).toBe("hold"); // 手動保留
+  expect(st([ev(1, true, day(0.5))], lw, {}).state).not.toBe("hold");        // 保留解除で戻る
+});
+test("L2: 状態計算・選出は履歴を改変しない", () => {
+  startLogSession("B");
+  logAnswer("B", { question_id: 1, selected_choice: "ア", is_correct: false, mode: "weak" });
+  localStorage.setItem("feb_missed", JSON.stringify([{ id: 2 }]));
+  const before = JSON.stringify({ l: loadLog("B"), m: localStorage.getItem("feb_missed") });
+  const qs = range(1, 5).map(id => ({ id, cat: "x" }));
+  recordShown("B", planStudy("B", qs, "すべて"));
+  expect(JSON.stringify({ l: loadLog("B"), m: localStorage.getItem("feb_missed") })).toBe(before);
+});

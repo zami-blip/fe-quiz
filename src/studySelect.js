@@ -134,9 +134,15 @@ export function selectSession({ ids, events, legacy, flags, settings, shown, now
     const base = picks.length;
     // 枠の配分: 未回答の最低枠 → 復習枠 → 互いの不足補充 → 再確認 → 正解済み
     const needU = Math.max(0, nU - picks.filter(p => p.kind === "未回答").length);
-    const needR = Math.max(0, nR - picks.filter(p => p.kind === "復習").length);
+    const needR = Math.max(0, nR - picks.filter(p => p.kind === "復習" || p.kind === "再確認").length);
     take(U, needU, "未回答", allowRecent, lblU);
-    take(R, needR, "復習", allowRecent, lblR);
+    // 再確認期の予約枠: 復習枠(nR)の一部を再確認期に確保する。誤答(R)の優先順位は変えず、
+    // 残りの枠をRが使う。Dは最終出題が古い順なので、選ばれた問題は後ろへ回り、固定的に選ばれ続けない。
+    const needD = !allowRecent && needR >= 2 ? Math.min(D.length, Math.max(1, Math.floor(needR / 4))) : 0;
+    const beforeD = picks.length;
+    take(D, needD, "再確認", allowRecent, lblD);
+    const gotD = picks.length - beforeD;
+    take(R, needR - gotD, "復習", allowRecent, lblR);
     const rest = () => size - picks.length;
     if (rest() > 0) take(U, rest(), "未回答", allowRecent, lblU);
     if (rest() > 0) take(R, rest(), "復習", allowRecent, lblR);
