@@ -1,10 +1,16 @@
 import React from 'react';
 
-// 第1回の受験記録・問題データには触れない。第2回の準備が完了するまで選択肢は無効にする。
-export default function MockHome({ onFirst }) {
-  const hasAttempt = (() => {
-    try { return !!localStorage.getItem('fe_mock_v1_attempt'); } catch { return false; }
-  })();
+// 第1回の受験記録・問題データには触れない(読み取りだけ)。第2回は科目ごとの受験途中の有無を表示する。
+function has(key) {
+  try { return !!localStorage.getItem(key); } catch { return false; }
+}
+
+export default function MockHome({ onFirst, onSecond }) {
+  const hasAttempt = has('fe_mock_v1_attempt');
+  const r2A = has('fe_mock_r2_attempt_A');
+  const r2B = has('fe_mock_r2_attempt_B');
+  const r2Done = has('fe_mock_r2_results');
+  const r2Label = [r2A && '科目A', r2B && '科目B'].filter(Boolean).join('・');
   return (
     <main style={{ maxWidth: 680, margin: '32px auto', padding: 20, fontFamily: 'sans-serif', lineHeight: 1.8 }}>
       <h1>基本情報技術者 本番形式模擬試験</h1>
@@ -15,8 +21,10 @@ export default function MockHome({ onFirst }) {
       </section>
       <section style={{border:'1px solid #bbb',borderRadius:12,padding:20}}>
         <h2>第2回</h2>
-        <p>問題制作・検証中（未公開）。正解・解説・成績の混在を防ぐため、現在は受験できません。</p>
-        <button type="button" disabled style={{padding:'12px 20px'}}>準備中</button>
+        <p>科目A（60問・90分）と科目B（20問・100分）を、別々に受験できます。</p>
+        {r2Label && <p>{r2Label}の受験途中の記録があります。続きから再開できます（中断中も時間は経過しています）。</p>}
+        {!r2Label && r2Done && <p>受験済みの記録があります。結果の確認と再受験ができます。</p>}
+        <button type="button" onClick={onSecond} style={{padding:'12px 20px',cursor:'pointer'}}>第2回を開く</button>
       </section>
     </main>
   );

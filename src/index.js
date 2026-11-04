@@ -6,9 +6,12 @@ import AppTerms from './AppTerms';
 // 模擬試験は通常画面の読込みを重くしないよう、/mock を開いたときだけ読み込む
 const AppMock = lazy(() => import('./AppMock'));
 const MockHome = lazy(() => import('./mock/MockHome'));
+const AppMock2 = lazy(() => import('./mock/r2/AppMock2'));
 function MockEntry() {
-  const [first, setFirst] = React.useState(false);
-  return first ? <AppMock /> : <MockHome onFirst={() => setFirst(true)} />;
+  const [round, setRound] = React.useState(null);
+  if (round === 1) return <AppMock />;
+  if (round === 2) return <AppMock2 onBack={() => setRound(null)} />;
+  return <MockHome onFirst={() => setRound(1)} onSecond={() => setRound(2)} />;
 }
 const root = ReactDOM.createRoot(document.getElementById('root'));
 const path = window.location.pathname.replace(/\/+$/,'').toLowerCase();

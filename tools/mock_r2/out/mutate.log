@@ -1,0 +1,11 @@
+m1: M2A13 誤答アの検算記録を段階1の指摘と同じ値にする → 検出（choice_consistency: C2／check_r2: NG 0件）
+m2: M2A13 解説から誤答アの値1.25を消す → 検出（choice_consistency: C4／check_r2: NG 0件）
+m3: M2A07 誤答イを正解と同じ10にする → 検出（choice_consistency: C5／check_r2: NG 1件：M2A07 最短距離: 条件に合う選択肢 ['ア', 'イ']、正解 ア）
+m4: M2B02 正解記号をイに変える → 検出（choice_consistency: C3,C6／check_r2: NG 1件：M2B02 戻り値と upd: 条件に合う選択肢 ['ア']、正解 イ）
+m5: M2B09 選択肢カの検算記録を消す → 検出（choice_consistency: C1／check_r2: NG 0件）
+m6: M2B13 プログラムの return false を return true にする → 検出（choice_consistency: なし／check_r2: NG 1件：M2B13 空欄: 仕様どおりの選択肢 []、正解 イ）
+m7: M2A22 表“貸出”の6行目(会員105)の貸出日を9月29日に変える → 検出（choice_consistency: なし／check_r2: NG 1件：M2A22 SQL の結果: 条件に合う選択肢 []、正解 ア）
+m8: M2B16 表の要素番号3の left を0にする → 検出（choice_consistency: なし／check_r2: NG 1件：M2B16 表の行 ['3', '70', '0', '0']）
+m9: M2B01 正解記号だけをアに変える(解説はそのまま) → 検出（choice_consistency: C3,C7／check_r2: NG 1件：M2B01 空欄: 仕様どおりの選択肢 ['ウ']、正解 ア）
+m10: M2M03 図の構造の文章の4日目の値を限界線の内側に変える → 検出（choice_consistency: なし／check_r2: NG 2件：M2M03 図の点の位置と測定値）
+全件検出
