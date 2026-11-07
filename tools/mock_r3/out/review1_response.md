@@ -7,7 +7,7 @@
 | 作業開始時のブランチの最新 | `895e0fc`（自分の報告書追加のみ。先行する他者の修正はなし） |
 | 更新コミット | `ebb588e`（修正本体）、`65770dc`（__pycache__ の除外のみ） |
 | push | 作業ブランチへ push 済み |
-| main・本番 | 反映していない（main は `78481b0` のまま） |
+| main・本番 | **本人の指示（2026-11-07 19:55）により公開済み**。追加対応 `a49bb72` まで含めて main に fast-forward で反映。Vercel の Production デプロイは success。https://fe-quiz-five.vercel.app/mock |
 
 維持したもの：80問の構成、問題ID、正解記号（全80問とも変更なし）、保存キー（`fe_mock_r3_*`）、既存の受験履歴。第1回・第2回のファイルは変更なし（`git diff 78481b0 HEAD -- src/AppMock.jsx src/mock/mock*.js* src/mock/r2` は空）。
 
