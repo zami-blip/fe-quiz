@@ -101,6 +101,42 @@ const results = page => page.evaluate(() => JSON.parse(localStorage.getItem("fe_
     r = await results(page);
     ok(r.length === 1 && r[0].submittedBy === "timeout" && r[0].elapsedMs === LIMIT, `${name}: 5) 離れていた間に期限を過ぎ、復帰時に時間切れで自動提出`);
     await ctx.close();
+    // 6) 定期更新を待たずに画面を離れ(非表示 → pagehide)、再読込み
+    const hide = () => page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("pagehide"));
+      window.dispatchEvent(new Event("pagehide"));            // 続けて発生しても二重にならないこと
+    });
+    const att = () => page.evaluate(() => JSON.parse(localStorage.getItem("fe_mock_r3_attempt_A") || "null"));
+    // 6a) 期限直前：離れた時点までの経過を反映して保存し、再読込み後の残り時間が正しい
+    ({ ctx, page } = await setup(browser, vp, 1500));
+    const b6 = await att();
+    await page.clock.setSystemTime(await page.evaluate(() => Date.now()) + 900);   // 定期更新は走らない
+    await hide();
+    let a6 = await att();
+    // 増えた経過 ＝ 前回の保存時刻から離れた時刻まで(壁時計)。二重に加算していれば、これより大きくなる
+    ok(a6 && a6.elapsedMs - b6.elapsedMs >= 900 && Math.abs((a6.elapsedMs - b6.elapsedMs) - (a6.lastWall - b6.lastWall)) <= 5 && !a6.endedAt,
+      `${name}: 6a) 非表示・pagehide で未反映の ${a6.elapsedMs - b6.elapsedMs}ms（保存時刻の差 ${a6.lastWall - b6.lastWall}ms）を反映、二重加算なし`);
+    const wall6 = a6.lastWall;
+    await page.reload();
+    await page.getByRole("button", { name: "第3回を開く" }).click();
+    a6 = await att();
+    ok(a6 && LIMIT - a6.elapsedMs > 0 && LIMIT - a6.elapsedMs <= 600 && !a6.endedAt && (await results(page)).length === 0, `${name}: 6a) 再読込み後の残り ${LIMIT - a6.elapsedMs}ms（期限前のまま再開できる）`);
+    await ctx.close();
+    // 6b) 期限ちょうど・直後に離れる → 期限の時刻で自動提出、結果は1件だけ
+    for (const after of [1500, 1501, 4000]) {
+      ({ ctx, page } = await setup(browser, vp, 1500));
+      const t0 = await page.evaluate(() => Date.now());
+      await page.clock.setSystemTime(t0 + after);
+      await hide();
+      await page.reload();
+      await page.getByRole("button", { name: "第3回を開く" }).waitFor();
+      r = await results(page);
+      ok(r.length === 1 && r[0].submittedBy === "timeout" && r[0].elapsedMs === LIMIT && Date.parse(r[0].endedAt) <= t0 + 1500 && Date.parse(r[0].endedAt) > t0 + 1500 - 1100 && !(await att()),
+        `${name}: 6b) 期限+${after - 1500}ms で画面を離れ再読込み → 自動提出1件、終了時刻は期限（離れた時刻ではない。終了時刻は秒単位で記録）`);
+      await ctx.close();
+    }
   }
   await browser.close();
   fs.writeFileSync(__dirname + "/out/e2e_deadline.log", log.join("\n") + "\n");

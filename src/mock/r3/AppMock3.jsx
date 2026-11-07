@@ -176,8 +176,11 @@ export default function AppMock3({ onBack }) {
 
   useEffect(() => {
     const id = setInterval(tick, 1000);
-    const save = () => ["A", "B"].forEach(k => { const a = attRef.current[k]; if (a && !a.endedAt) { a.lastWall = Date.now(); saveAttempt(a); } });
-    const onVis = () => { if (document.visibilityState === "visible") tick(); else save(); };
+    // 画面を離れる(非表示・pagehide)ときも、保存時刻を更新する前に未反映の経過を定期更新と同じ処理(tick)で反映する。
+    // 期限に達していれば期限の時刻で timeout として結果に保存される。終了済みの受験は tick が飛ばすので、
+    // 両イベントが続けて起きても二重に加算・保存しない(結果の保存は attemptId で重複も防ぐ)。
+    const save = () => tick();
+    const onVis = () => tick();
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pagehide", save);
     return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); window.removeEventListener("pagehide", save); };

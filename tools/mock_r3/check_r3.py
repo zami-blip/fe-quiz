@@ -688,7 +688,7 @@ ok("x が false のとき y は評価しない" in text(QB["M3B16"]), "M3B16 and
 ok("改ざんされていない" not in json.dumps(QB["M3B19"], ensure_ascii=False) and "署名の対象としたヘッダと本文" in QB["M3B19"]["explanation"], "M3B19 DKIM の範囲")
 ok("端末から出ない" not in json.dumps(QA["M3A33"], ensure_ascii=False) and "認証先の Web サービスに送らない" in ctext(QA["M3A33"], QA["M3A33"]["correct"]), "M3A33 秘密鍵の記述")
 ok("可能性が高い" not in QA["M3A34"]["explanation"] and "許可したファイルの一覧" in ctext(QA["M3A34"], QA["M3A34"]["correct"])[1], "M3A34 試行と読出しの区別・許可リスト")
-ok("30日後" in ctext(QA["M3A57"], "ウ") and "できる限り短い期間内" in QA["M3A57"]["explanation"], "M3A57 支払期日")
+ok("30日後" in ctext(QA["M3A57"], "ウ") and "できる限り短い期間内" in QA["M3A57"]["explanation"] and "支払える最も早い日は、成果物を受領した日から30日後" in text(QA["M3A57"]), "M3A57 支払期日(最も早い支払日を本文に明記)")
 
 # B17 認証ログの事実
 q = QB["M3B17"]
