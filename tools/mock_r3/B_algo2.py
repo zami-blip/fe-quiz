@@ -558,6 +558,17 @@ def t16(ns):
 
 
 r16 = only(run_blank(code16, h16, ch16, t16), "オ")
+# 左の子だけがある節(c ＋ 1 ＞ n)まで下りる場合も、右の子 h[c ＋ 1] を参照しないこと(範囲外参照なし)を確かめる
+ns16 = PS.load(PS.fill_blanks(code16, dict(zip(h16, ch16[4]))))
+left_only = 0
+for n in range(2, 16, 2):
+    for top in range(1, 40):
+        arr = PS.A([top] + list(range(1, n)))
+        call(ns16, "downHeap", arr, n)   # 範囲外を参照すると OutOfRange で止まる
+        v = arr.py()
+        assert all(v[(i - 1) // 2] <= v[i] for i in range(1, n))
+        left_only += 1
+assert left_only == 7 * 39
 ex16 = {}
 for lab, cols in zip("アイウエオカ", ch16):
     ns = PS.load(PS.fill_blanks(code16, dict(zip(h16, cols))))
@@ -569,6 +580,7 @@ LOG.append(("M3B16", r16, ex16))
 qb("M3B16", AL, "木構造", "配列で表した最小ヒープの根を正しい位置まで下ろす", "仕様読解", "標準", 285,
    [P(INTRO2),
     P("配列 h の要素番号1～n に、二分木を次のように格納する。要素番号 i の節の子は、要素番号 2×i（左の子）と 2×i＋1（右の子）の節である（n を超える要素番号の子はない）。"),
+    P("条件式 x and y では、x が false のとき y は評価しない。"),
     P("全ての節で“親の値 ≦ 子の値”が成り立つ木を最小ヒープという。手続 downHeap は、根 h[1] 以外は最小ヒープの条件を満たしている h を受け取り、根の値を子と入れ替えながら下ろして、全体を最小ヒープにする。入れ替える相手は、2つの子のうち値の小さい方とする（子が1つならその子）。"),
     P("例えば、h が {9, 3, 4, 5, 7, 6, 8}、n が7のとき、9を子の小さい方の3と入れ替え、次に子の5・7のうち小さい5と入れ替えて、h は {3, 5, 4, 9, 7, 6, 8} になる。"),
     P("〔プログラム〕"), CODE(code16)],

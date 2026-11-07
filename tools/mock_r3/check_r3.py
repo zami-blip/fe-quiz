@@ -197,7 +197,8 @@ only(q, lambda s: (int(s, 16) // line) % nl == (base // line) % nl, "同じラ�
 q = QA["M3A14"]
 tx = text(q)
 st_ = int(re.search(r"(\d+)段のパイプライン", tx).group(1))
-ni = int(re.search(r"(\d+)命令から成る", tx).group(1))
+ni = int(re.search(r"動的な命令数）は合計(\d+)", tx).group(1))
+ok("分岐による空き以外に、パイプラインの待ちや空きは生じない" in tx, "M3A14 前提の明示")
 nb = int(re.search(r"分岐が(\d+)回", tx).group(1))
 pen = int(re.search(r"(\d+)サイクルの空き", tx).group(1))
 only(q, lambda s: int(s) == st_ + ni - 1 + nb * pen, "サイクル数")
@@ -387,6 +388,12 @@ for combo in itertools.product(*[range(0, L - T_[t][0] + 1) for t in order]):
                 load[k] += T_[t][1]
         bestp = max(load) if bestp is None else min(bestp, max(load))
 ok(L == 7, "M3A44 最短の日数")
+load_es = [0] * L
+for t in order:
+    for k in range(es[t], es[t] + T_[t][0]):
+        load_es[k] += T_[t][1]
+ok(max(load_es) == 6 and [i + 1 for i, v in enumerate(load_es) if v == 6] == [3] and load_es[3] == 5, f"M3A44 最早開始の日別人数 {load_es}")
+ok("6人になるのは3日目" in q["explanation"] and "4日目は B3＋C2 の5人" in q["explanation"], "M3A44 解説の日別人数")
 only(q, lambda s: int(s) == bestp, "山崩しの最大人数")
 
 # A46 キャパシティ
@@ -676,6 +683,12 @@ def t_b16(ns):
 
 
 blank_check(QB["M3B16"], t_b16)
+
+ok("x が false のとき y は評価しない" in text(QB["M3B16"]), "M3B16 and の評価の明記")
+ok("改ざんされていない" not in json.dumps(QB["M3B19"], ensure_ascii=False) and "署名の対象としたヘッダと本文" in QB["M3B19"]["explanation"], "M3B19 DKIM の範囲")
+ok("端末から出ない" not in json.dumps(QA["M3A33"], ensure_ascii=False) and "認証先の Web サービスに送らない" in ctext(QA["M3A33"], QA["M3A33"]["correct"]), "M3A33 秘密鍵の記述")
+ok("可能性が高い" not in QA["M3A34"]["explanation"] and "許可したファイルの一覧" in ctext(QA["M3A34"], QA["M3A34"]["correct"])[1], "M3A34 試行と読出しの区別・許可リスト")
+ok("30日後" in ctext(QA["M3A57"], "ウ") and "できる限り短い期間内" in QA["M3A57"]["explanation"], "M3A57 支払期日")
 
 # B17 認証ログの事実
 q = QB["M3B17"]

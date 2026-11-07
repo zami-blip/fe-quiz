@@ -98,6 +98,26 @@ export function stepOnline(a, perfDelta, now = Date.now(), qid = null) {
   return done;
 }
 
+// 受験中の操作(回答・取消し・移動・見直しフラグ)の前に、操作の時点までの経過を反映する。
+// 制限時間に達していれば(ちょうども含む)操作を適用せずに自動提出の状態にして "timeout" を返す。
+// 経過の基準(a.lastWall と呼出し側の performance の基準)は定期更新と共有するので、二重に加算しない。
+export function operate(a, perfDelta, now, qid, fn) {
+  if (!a || a.endedAt) return "ended";
+  stepOnline(a, perfDelta, now, qid);
+  if (a.endedAt) return "timeout";
+  fn(a);
+  return "ok";
+}
+
+// 確認画面で「提出する」を押した時点で期限を判定する。期限前なら最後の定期更新からの時間も含めて提出する。
+export function submitAt(a, perfDelta, now, qid, by) {
+  if (!a || a.endedAt) return "ended";
+  stepOnline(a, perfDelta, now, qid);
+  if (a.endedAt) return "timeout";
+  finish(a, by, now);
+  return by;
+}
+
 export function finish(a, by, now = Date.now()) {
   if (!a.endedAt) { a.endedAt = isoWithTz(new Date(now)); a.submittedBy = by; }
   return a;

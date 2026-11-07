@@ -3,7 +3,7 @@ import QA from "./mockA3.json";
 import QB from "./mockB3.json";
 import {
   newAttempt, loadAttempt, saveAttempt, clearAttempt, loadResults, appendResult, nextAttemptNo, firstResult,
-  syncOffline, stepOnline, finish, remainingMs, getStoreError, loadPrevManual, savePrevManual, LIMIT_MS,
+  syncOffline, stepOnline, finish, operate, submitAt, remainingMs, getStoreError, loadPrevManual, savePrevManual, LIMIT_MS,
 } from "./mock3Store";
 import { buildReport3, round2Summary, compareRows, score, SUBJ, pct, mmss, BY, LIMIT_NOTE } from "./mock3Report";
 
@@ -206,8 +206,21 @@ export default function AppMock3({ onBack }) {
     syncOffline(a); a.resumes = (a.resumes || 0) + 1; perfRef.current = nowPerf();
     commit(a); if (!a.endedAt) setScreen({ name: "exam", sub });
   };
-  const leave = () => { const a = attRef.current[screen.sub]; if (a) { a.lastWall = Date.now(); commit(a); } setModal(null); setScreen({ name: "home" }); };
-  const mut = (fn) => { const a = attRef.current[screen.sub]; if (!a || a.endedAt) return; fn(a, QS[a.subject][a.current]); commit(a); };
+  // 操作の時点までの経過を、定期更新と同じ基準(perfRef・lastWall)で反映するための差分
+  const perfStep = () => { const p = nowPerf(); const d = p - perfRef.current; perfRef.current = p; return d; };
+  const curQid = a => { const q = QS[a.subject][a.current]; return q ? q.id : null; };
+  // 中断：移動前の設問に経過を加えてから戻る。期限に達していれば自動提出として保存する。
+  const leave = () => {
+    const a = attRef.current[screen.sub];
+    if (a && !a.endedAt) { operate(a, perfStep(), Date.now(), curQid(a), () => {}); commit(a); }
+    setModal(null); if (!a || !a.endedAt) setScreen({ name: "home" });
+  };
+  // 回答・取消し・移動・見直しフラグ：操作前に経過を反映し、期限に達していれば変更せずに自動提出を確定する
+  const mut = (fn) => {
+    const a = attRef.current[screen.sub]; if (!a || a.endedAt) return;
+    operate(a, perfStep(), Date.now(), curQid(a), x => fn(x, QS[x.subject][x.current]));
+    commit(a);
+  };
   const pick = (label) => mut((a, q) => {
     if (a.answers[q.id] === label) return;
     a.answers[q.id] = label;
@@ -222,7 +235,12 @@ export default function AppMock3({ onBack }) {
   });
   const go = (i) => mut(a => { a.current = Math.max(0, Math.min(QS[a.subject].length - 1, i)); });
   const toggleFlag = () => mut((a, q) => { if (a.flags[q.id]) delete a.flags[q.id]; else a.flags[q.id] = true; });
-  const submit = (by) => { const a = attRef.current[screen.sub]; if (!a) return; finish(a, by); commit(a); };
+  // 提出・中止は、確認画面で確定した時点で期限を判定する(期限ちょうど・後なら時間切れの自動提出)
+  const submit = (by) => {
+    const a = attRef.current[screen.sub]; if (!a || a.endedAt) return;
+    submitAt(a, perfStep(), Date.now(), curQid(a), by);
+    commit(a);
+  };
 
   const warn = storeErr && <div className="m2-warn">保存の警告：{storeErr}。この画面を閉じずに、空き容量の確保やバックアップを行ってください。</div>;
 
