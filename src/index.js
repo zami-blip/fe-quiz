@@ -7,11 +7,13 @@ import AppTerms from './AppTerms';
 const AppMock = lazy(() => import('./AppMock'));
 const MockHome = lazy(() => import('./mock/MockHome'));
 const AppMock2 = lazy(() => import('./mock/r2/AppMock2'));
+const AppMock3 = lazy(() => import('./mock/r3/AppMock3'));
 function MockEntry() {
   const [round, setRound] = React.useState(null);
   if (round === 1) return <AppMock />;
   if (round === 2) return <AppMock2 onBack={() => setRound(null)} />;
-  return <MockHome onFirst={() => setRound(1)} onSecond={() => setRound(2)} />;
+  if (round === 3) return <AppMock3 onBack={() => setRound(null)} />;
+  return <MockHome onFirst={() => setRound(1)} onSecond={() => setRound(2)} onThird={() => setRound(3)} />;
 }
 const root = ReactDOM.createRoot(document.getElementById('root'));
 const path = window.location.pathname.replace(/\/+$/,'').toLowerCase();
