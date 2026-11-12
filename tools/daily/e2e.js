@@ -30,6 +30,13 @@ const pickOpt = async (page, q, label) => {
   else await page.getByRole("radio", { name: new RegExp("^" + label) }).click();
 };
 const near = (x, y) => Math.abs(x - y) <= 100; // 操作の実時間による数十ミリ秒の差は許容
+// fe_daily_notes への保存だけを失敗させる／元に戻す
+const breakNotes = page => page.evaluate(() => {
+  if (!window.__origSet) window.__origSet = Storage.prototype.setItem;
+  Storage.prototype.setItem = function (k, v) { if (k === "fe_daily_notes") throw new Error("QuotaExceededError(test)"); return window.__origSet.call(this, k, v); };
+});
+const fixNotes = page => page.evaluate(() => { if (window.__origSet) Storage.prototype.setItem = window.__origSet; });
+const alertShown = async page => (await page.getByRole("alert").count()) > 0 && await page.getByRole("alert").first().isVisible();
 const now = page => page.evaluate(() => Date.now());
 
 (async () => {
@@ -118,9 +125,21 @@ const now = page => page.evaluate(() => Date.now());
     ok(!(await ls(page, "fe_daily_attempt_" + SA.setId)), `${name}: 提出後は受験中データを削除`);
     ok(await page.getByText("正解 2／5").first().isVisible(), `${name}: 採点 2／5`);
     ok(await page.getByText("まず復習する1問").isVisible() && await page.getByText(/問2　誤答/).isVisible(), `${name}: 最初の誤答（問2）を優先表示`);
-    // 理由を付け、優先問題を変える
+    // 理由の保存に失敗 → 警告。失敗したままの再試行では警告が残り、直ってからの再試行で保存されて警告が消える
+    await breakNotes(page);
     await page.getByRole("button", { name: "途中の値", exact: true }).first().click();
-    await page.clock.runFor(5000);
+    ok(await alertShown(page) && !(await ls(page, "fe_daily_notes")), `${name}: メモの保存失敗で警告を表示（未保存）`);
+    await btn(page, "保存を再試行").click();
+    ok(await alertShown(page), `${name}: 失敗したままの再試行では警告が残る`);
+    await fixNotes(page);
+    await btn(page, "保存を再試行").click();
+    ok(!(await alertShown(page)), `${name}: 再試行が成功すると警告が消える`);
+    let nsv = await ls(page, "fe_daily_notes");
+    ok(nsv && Object.values(nsv).some(e => e.reasons && e.reasons[SA.questions[1].id] === "途中の値"), `${name}: 再試行で理由を保存`);
+    // 解説を2問開いて30秒 → 解説の閲覧時間は記録しない（受験中の設問別時間だけを使う）
+    await page.locator("button.m2-choice").filter({ hasText: "解説を開く" }).first().click();
+    ok((await page.getByText("正解 ").count()) >= 2, `${name}: 解説を2問同時に開ける`);
+    await page.clock.runFor(30000);
     await page.locator(".dl-strip").getByRole("button", { name: "問3" }).click();
     ok(await page.getByText(/問3　未回答/).isVisible(), `${name}: 優先問題を問3に変更`);
     await page.screenshot({ path: `${OUT}/${name}_05_resultA.png`, fullPage: true });
@@ -128,9 +147,10 @@ const now = page => page.evaluate(() => Date.now());
     const notes = await ls(page, "fe_daily_notes");
     const nn = notes[res[0].attemptId];
     ok(nn.reasons[q2] === "途中の値" && nn.priority === SA.questions[2].id, `${name}: 理由と優先問題を保存`);
-    ok(nn.reviewMs[q2] >= 4000, `${name}: 解説を開いていた時間を受験時間とは別に記録 (${nn.reviewMs[q2]})`);
+    ok(!JSON.stringify(notes).includes("reviewMs"), `${name}: 複数の解説を開いても閲覧時間を記録しない`);
     ok(res[0].elapsedMs === (await ls(page, "fe_daily_results"))[0].elapsedMs, `${name}: 解説を見ても受験記録は変わらない`);
     const repA = await page.locator("textarea.m2-rep").inputValue();
+    ok(!repA.includes("解説を開いていた時間"), `${name}: GPT用テキストに解説の閲覧時間を出さない`);
     ok(/初回の表示 10秒、再訪 1[01]秒、表示した回数 2回/.test(repA) && /本人が付けた理由: 途中の値/.test(repA) && /問題を表示していなかった時間: 1分0[0-9]秒/.test(repA), `${name}: セットのGPT用テキストに時間・理由・非表示時間`);
 
     // ---- 日ごとの画面：Bは未受験
@@ -155,6 +175,14 @@ const now = page => page.evaluate(() => Date.now());
     const startB = Date.parse((await ls(page, "fe_daily_attempt_" + SB.setId)).startedAt);
     await btn(page, "中断").click(); await btn(page, "中断して戻る").click();
     await page.clock.runFor(1000);
+    // 受験中のセットがある状態で日のメモの保存に失敗 → 受験データの保存（毎秒）が成功しても、メモの警告は消えない
+    await breakNotes(page);
+    await page.locator("#dl-memo").fill("失敗テスト");
+    await page.clock.runFor(3000);
+    ok(await alertShown(page), `${name}: 受験データの保存が成功してもメモの警告は残る`);
+    await fixNotes(page);
+    await btn(page, "保存を再試行").click();
+    ok(!(await alertShown(page)) && (await ls(page, "fe_daily_notes"))["day:2026-11-13"].memo === "失敗テスト", `${name}: 再試行で日のメモを保存し警告が消える`);
     await page.clock.setSystemTime(await now(page) + 20 * 60000);   // 20分後に戻る
     await page.reload();
     await page.getByRole("heading", { name: "今日の学習" }).waitFor();

@@ -29,11 +29,10 @@ export function attemptLines(plan, set, a, notes) {
     const q = r.q;
     const meta = (a.questions || []).find(x => x.id === q.id);
     const reason = n.reasons && n.reasons[q.id];
-    const rv = n.reviewMs && n.reviewMs[q.id];
     L.push(`#### 問${r.i + 1}. ${q.id}（版 ${q.version || 1}）【${r.status}】`);
     L.push(`区分: ${kindText(meta, a.isRetake)}　分野: ${q.field}／${q.cat}　測定する技能: ${q.measures || q.skill}　想定所要時間（作問上の見積り）: ${q.expected_seconds}秒`);
     L.push(`設問別滞在時間: 合計 ${r.sec}秒（初回の表示 ${r.firstSec}秒、再訪 ${r.revisitSec}秒、表示した回数 ${r.visits}回）　回答の変更: ${r.changes}回${r.history.length ? "（" + r.history.map(h => `${Math.round(h.t / 1000)}秒時点で${h.v || "取消し"}`).join("→") + "）" : ""}　保留: ${r.flagged ? "あり" : "なし"}`);
-    L.push(`本人の解答: ${r.ans || "未回答"}　正解: ${q.correct}${reason ? "　本人が付けた理由: " + reason : ""}${rv ? "　提出後に解説を開いていた時間: " + secText(Math.round(rv / 1000)) : ""}`);
+    L.push(`本人の解答: ${r.ans || "未回答"}　正解: ${q.correct}${reason ? "　本人が付けた理由: " + reason : ""}`);
     L.push("問題文:"); L.push(blocksText(q.body));
     L.push("解答群:"); L.push(choiceText(q));
     L.push("解説: " + q.explanation);

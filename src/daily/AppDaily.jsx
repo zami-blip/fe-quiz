@@ -4,7 +4,7 @@ import { PLANS, planOf, findSet } from "./plans";
 import {
   jstDate, addDays, dateLabel, loadResults, loadAllAttempts, saveAttempt, clearAttempt, appendResult, loadNotes, saveNotes,
   newAttempt, nextAttemptNo, setResults, syncHidden, stepOnline, operate, goTo, markVisit, pick, clearAnswer, toggleFlag,
-  submitAt, remainingMs, getStoreError, judgeSet, defaultPriority, setStatus, REASONS, STATUS, ONLINE_CAP_MS,
+  submitAt, remainingMs, getStoreError, judgeSet, defaultPriority, setStatus, REASONS, STATUS, 
 } from "./dailyStore";
 import { buildDayReport, buildAttemptReport, BY, mmss, secText } from "./dailyReport";
 
@@ -71,19 +71,20 @@ export default function AppDaily() {
   const [notes, setNotesState] = useState(() => loadNotes());
   const [screen, setScreen] = useState({ name: "day" }); // day | intro(setId) | exam(setId) | result(attemptId)
   const [modal, setModal] = useState(null);
-  const [storeErr, setStoreErr] = useState("");
+  // 保存エラーは受験データとメモ（理由・優先問題・日のメモ）で別に持つ。片方の保存成功でもう片方の警告を消さない。
+  const [attErr, setAttErr] = useState({}); // setId → エラー文
+  const setErrFor = (setId, msg) => setAttErr(s => { const n = { ...s }; if (msg) n[setId] = msg; else delete n[setId]; return n; });
+  const [notesErr, setNotesErr] = useState("");
   const [openQ, setOpenQ] = useState({});
   const attRef = useRef(att); attRef.current = att;
   const screenRef = useRef(screen); screenRef.current = screen;
   const notesRef = useRef(notes); notesRef.current = notes;
-  const openRef = useRef(openQ); openRef.current = openQ;
   const visibleRef = useRef(typeof document === "undefined" ? true : !document.hidden);
-  const reviewWall = useRef(Date.now());
   const submitting = useRef(false);
 
   const updateNotes = useCallback(fn => {
     const n = clone(notesRef.current); fn(n); notesRef.current = n; setNotesState(n);
-    if (!saveNotes(n)) setStoreErr(getStoreError());
+    setNotesErr(saveNotes(n) ? "" : getStoreError() + "（理由・メモはこの画面に保持しています）");
   }, []);
 
   // 受験データを保存する。終了した受験は結果に追加してから受験中のデータを消す（追加に失敗したら消さずに残す）。
@@ -93,23 +94,27 @@ export default function AppDaily() {
         clearAttempt(a.setId);
         setResultsState(loadResults());
         setAtt(s => { const n = { ...s }; delete n[a.setId]; return n; });
-        setStoreErr("");
+        setErrFor(a.setId, "");
         const sc = screenRef.current;
         if (sc.name === "exam" && sc.setId === a.setId) { setModal(null); setOpenQ({}); setScreen({ name: "result", attemptId: a.attemptId }); }
         return true;
       }
-      setStoreErr(getStoreError() + "（結果の保存に失敗しました。解答はこの画面に保持しています。「保存を再試行」を押してください）");
+      setErrFor(a.setId, getStoreError() + "（結果の保存に失敗しました。解答はこの画面に保持しています）");
       saveAttempt(a);
       setAtt(s => ({ ...s, [a.setId]: { ...a } }));
       return false;
     }
     const ok = saveAttempt(a);
-    setStoreErr(ok ? "" : getStoreError());
+    setErrFor(a.setId, ok ? "" : getStoreError());
     setAtt(s => ({ ...s, [a.setId]: { ...a } }));
     return ok;
   }, []);
 
-  const retrySave = () => { Object.values(attRef.current).forEach(a => commit(a)); };
+  // 受験データとメモの両方を保存し直す。警告は、それぞれの保存が成功したときにだけ消える（commit・下の判定）。
+  const retrySave = () => {
+    Object.values(attRef.current).forEach(a => commit(a));
+    setNotesErr(saveNotes(notesRef.current) ? "" : getStoreError() + "（理由・メモはこの画面に保持しています）");
+  };
 
   // 起動時：閉じていた間の経過を反映（期限を過ぎていれば期限の時刻で提出）し、保存待ちの結果を保存する
   useEffect(() => { Object.values(attRef.current).forEach(a => commit(a)); }, [commit]);
@@ -124,18 +129,12 @@ export default function AppDaily() {
       else syncHidden(a, now);
       commit(a);
     });
-    // 提出後の解説を開いている時間（受験時間とは別に記録）
-    const d = Math.min(Math.max(0, now - reviewWall.current), ONLINE_CAP_MS); reviewWall.current = now;
-    const open = Object.keys(openRef.current).filter(k => openRef.current[k]);
-    if (visibleRef.current && sc.name === "result" && open.length && d > 0) {
-      updateNotes(n => { const e = n[sc.attemptId] = n[sc.attemptId] || {}; e.reviewMs = e.reviewMs || {}; open.forEach(q => { e.reviewMs[q] = (e.reviewMs[q] || 0) + d; }); });
-    }
-  }, [commit, updateNotes]);
+  }, [commit]);
 
   useEffect(() => {
     const id = setInterval(tick, 1000);
     // 表示状態が変わったら、変わる前の状態で今までの経過を反映してから切り替える（二重に数えない）
-    const onVis = () => { tick(); visibleRef.current = !document.hidden; reviewWall.current = Date.now(); };
+    const onVis = () => { tick(); visibleRef.current = !document.hidden; };
     const onHide = () => tick();
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pagehide", onHide);
@@ -153,8 +152,9 @@ export default function AppDaily() {
   const scrollKey = screen.name + ":" + (screen.setId || screen.attemptId || "") + ":" + (cur ? cur.current : "");
   useEffect(() => { window.scrollTo(0, 0); }, [scrollKey]);
 
+  const storeErr = [...Object.values(attErr), notesErr].filter(Boolean).join("／");
   const warn = storeErr && (
-    <div className="m2-warn">保存の警告：{storeErr}
+    <div className="m2-warn" role="alert">保存の警告：{storeErr}。「保存を再試行」を押してください。
       <div className="m2-row" style={{ marginTop: 6 }}><button className="m2-btn r" onClick={retrySave}>保存を再試行</button></div>
     </div>);
 
@@ -382,7 +382,7 @@ function Result({ a, plan, set, results, notes, updateNotes, openQ, setOpenQ, wa
   const setNote = (fn) => updateNotes(x => { const e = x[a.attemptId] = x[a.attemptId] || {}; fn(e); });
   const priRow = S.rows.find(r => r.q.id === pri);
   const toggle = id => setOpenQ(o => ({ ...o, [id]: !o[id] }));
-  // 優先する1問は、開いた状態で表示する（解説を開いている時間として記録）
+  // 優先する1問は、解説を開いた状態で表示する
   useEffect(() => { if (pri && openQ[pri] === undefined) setOpenQ(o => ({ ...o, [pri]: true })); }, [pri]);
 
   const Detail = ({ r }) => {

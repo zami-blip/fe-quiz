@@ -121,12 +121,12 @@ test("日ごとのGPT分析用テキスト：未受験のセットは未受験�
   pick(a, setA.questions[4].id, "ア");
   submitAt(a, T0 + 300000, setA.questions[0].id);
   appendResult(a);
-  const notes = { [a.attemptId]: { reasons: { [setA.questions[4].id]: "知識・式" }, reviewMs: { [setA.questions[4].id]: 42000 } }, "day:2026-11-13": { memo: "朝10分" } };
+  const notes = { [a.attemptId]: { reasons: { [setA.questions[4].id]: "知識・式" } }, "day:2026-11-13": { memo: "朝10分" } };
   const t = buildDayReport(plan, {}, loadResults(), notes);
   expect(t).toMatch("daily-20261113-B01（科目B 2問セット、2問・制限 10分00秒）: 未受験");
   expect(t).toMatch("受験済みセットの初回合計: 正解 4／5　誤答 1　未回答 0");
   expect(t).toMatch("本人が付けた理由: 知識・式");
-  expect(t).toMatch("提出後に解説を開いていた時間: 42秒");
+  expect(t).not.toMatch("解説を開いていた時間");
   expect(t).toMatch("本人のメモ（使えた時間など）: 朝10分");
   expect(t).toMatch("初回の表示");
   expect(t).toMatch("```");                       // コード（SQL）を含む
