@@ -5713,6 +5713,7 @@ export default function App(){
           <div style={s.sub}>基本情報技術者 — 科目A(全分野ミックス)</div>
           {logError && <div style={{fontSize:11,color:C.red,marginTop:4}}>回答ログの保存に失敗しました: {logError}</div>}
           <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap",marginTop:8}}>
+            <a href="/daily" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px",fontWeight:700}}>今日の学習 →</a>
             <a href="/b" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>科目Bの問題を解く →</a>
             <a href="/terms" style={{fontSize:12,color:C.accent,textDecoration:"none",border:`1px solid ${C.accent}`,borderRadius:6,padding:"4px 10px"}}>用語フラッシュカード →</a>
           </div>

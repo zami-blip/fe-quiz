@@ -8,6 +8,8 @@ const AppMock = lazy(() => import('./AppMock'));
 const MockHome = lazy(() => import('./mock/MockHome'));
 const AppMock2 = lazy(() => import('./mock/r2/AppMock2'));
 const AppMock3 = lazy(() => import('./mock/r3/AppMock3'));
+// 今日の学習（日ごとの短いセット）も /daily を開いたときだけ読み込む
+const AppDaily = lazy(() => import('./daily/AppDaily'));
 function MockEntry() {
   const [round, setRound] = React.useState(null);
   if (round === 1) return <AppMock />;
@@ -17,5 +19,5 @@ function MockEntry() {
 }
 const root = ReactDOM.createRoot(document.getElementById('root'));
 const path = window.location.pathname.replace(/\/+$/,'').toLowerCase();
-const page = path === '/b' ? <AppB /> : path === '/terms' ? <AppTerms /> : path === '/mock' ? <Suspense fallback={<div style={{padding:20}}>読み込み中…</div>}><MockEntry /></Suspense> : <App />;
+const page = path === '/b' ? <AppB /> : path === '/terms' ? <AppTerms /> : path === '/daily' ? <Suspense fallback={<div style={{padding:20}}>読み込み中…</div>}><AppDaily /></Suspense> : path === '/mock' ? <Suspense fallback={<div style={{padding:20}}>読み込み中…</div>}><MockEntry /></Suspense> : <App />;
 root.render(page);

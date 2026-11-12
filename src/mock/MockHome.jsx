@@ -18,6 +18,7 @@ export default function MockHome({ onFirst, onSecond, onThird }) {
   return (
     <main style={{ maxWidth: 680, margin: '32px auto', padding: 20, fontFamily: 'sans-serif', lineHeight: 1.8 }}>
       <h1>基本情報技術者 本番形式模擬試験</h1>
+      <p><a href="/daily">今日の学習（短いセット）はこちら</a></p>
       <section style={{border:'1px solid #bbb',borderRadius:12,padding:20,marginBottom:16}}>
         <h2>第1回</h2>
         {hasAttempt && <p>受験途中の記録があります。続きから再開できます。</p>}

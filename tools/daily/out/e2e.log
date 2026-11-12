@@ -1,0 +1,153 @@
+OK  pc: 日本時間の今日の日付
+OK  pc: 今日の目標を表示
+OK  pc: 2セットとも未受験
+OK  pc: 問題数と制限時間
+OK  pc: 翌日の課題は未作成と表示
+OK  pc: 開始前の画面にセットの目標
+OK  pc: 開始時の残り時間 7:30
+OK  pc: 受験中は正解を表示しない
+OK  pc: 問4（表）で横はみ出しなし
+OK  pc: 問2（SQL・表）で横はみ出しなし
+OK  pc: 問1 20秒・回答変更1回 (20000)
+OK  pc: 問2 初回10秒＋再訪10秒・表示2回 ({"ms":19983,"firstMs":10000,"revisitMs":9983,"visits":2,"changes":0,"history":[{"t":53000,"v":"ウ"}]})
+OK  pc: 問4 15秒
+OK  pc: 非表示60秒は hiddenMs にだけ記録 (60000)
+OK  pc: 設問別合計＋非表示＝経過（二重加算なし） 54983+60000=114983
+OK  pc: 保留を記録
+OK  pc: 再読込後 回答3問を復元
+OK  pc: 再読込後の残り時間 残り 5:35 → 残り 5:34
+OK  pc: 再開回数1
+OK  pc: 二重クリックでも結果は1件
+OK  pc: 提出後は受験中データを削除
+OK  pc: 採点 2／5
+OK  pc: 最初の誤答（問2）を優先表示
+OK  pc: 優先問題を問3に変更
+OK  pc: 結果画面で横はみ出しなし
+OK  pc: 理由と優先問題を保存
+OK  pc: 解説を開いていた時間を受験時間とは別に記録 (5000)
+OK  pc: 解説を見ても受験記録は変わらない
+OK  pc: セットのGPT用テキストに時間・理由・非表示時間
+OK  pc: Aは完了・Bは未受験
+OK  pc: 日のテキスト（Bは未受験、誤答に数えない）
+OK  pc: B問1（コード）で横はみ出しなし
+OK  pc: コードは枠内または横スクロール
+OK  pc: B問2（表・コード）で横はみ出しなし
+OK  pc: 期限後の復帰で自動提出（経過10分）
+OK  pc: 提出時刻は期限の時刻
+OK  pc: 未回答も記録
+OK  pc: 両セット完了
+OK  pc: 再受験の開始前表示
+OK  pc: 再受験を2回目として記録・時間切れで自動提出
+OK  pc: 結果に自動提出と表示
+OK  pc: 日のテキストで初回と再受験を区別
+OK  pc: メモを出力に反映
+OK  pc: 通常学習のデータを変更しない
+OK  pc: 第3回模試の記録を変更しない
+OK  pc: 追加したキーは fe_daily_ のみ (fe_daily_notes,fe_daily_results,fe_alog_v1,fe_mock_r3_results)
+OK  pc: 第3回模試の画面と受験記録を表示
+OK  pc: 通常学習画面に「今日の学習」の導線
+OK  pc: 翌日に開くと今日（11/14）は未作成
+OK  pc: 過去の課題と結果を開ける
+OK  pc: コンソールエラーなし 
+OK  ipad: 日本時間の今日の日付
+OK  ipad: 今日の目標を表示
+OK  ipad: 2セットとも未受験
+OK  ipad: 問題数と制限時間
+OK  ipad: 翌日の課題は未作成と表示
+OK  ipad: 開始前の画面にセットの目標
+OK  ipad: 開始時の残り時間 7:30
+OK  ipad: 受験中は正解を表示しない
+OK  ipad: 問4（表）で横はみ出しなし
+OK  ipad: 問2（SQL・表）で横はみ出しなし
+OK  ipad: 問1 20秒・回答変更1回 (20000)
+OK  ipad: 問2 初回10秒＋再訪10秒・表示2回 ({"ms":20000,"firstMs":10000,"revisitMs":10000,"visits":2,"changes":0,"history":[{"t":53000,"v":"ウ"}]})
+OK  ipad: 問4 15秒
+OK  ipad: 非表示60秒は hiddenMs にだけ記録 (60000)
+OK  ipad: 設問別合計＋非表示＝経過（二重加算なし） 55000+60000=115000
+OK  ipad: 保留を記録
+OK  ipad: 再読込後 回答3問を復元
+OK  ipad: 再読込後の残り時間 残り 5:34 → 残り 5:34
+OK  ipad: 再開回数1
+OK  ipad: 二重クリックでも結果は1件
+OK  ipad: 提出後は受験中データを削除
+OK  ipad: 採点 2／5
+OK  ipad: 最初の誤答（問2）を優先表示
+OK  ipad: 優先問題を問3に変更
+OK  ipad: 結果画面で横はみ出しなし
+OK  ipad: 理由と優先問題を保存
+OK  ipad: 解説を開いていた時間を受験時間とは別に記録 (5000)
+OK  ipad: 解説を見ても受験記録は変わらない
+OK  ipad: セットのGPT用テキストに時間・理由・非表示時間
+OK  ipad: Aは完了・Bは未受験
+OK  ipad: 日のテキスト（Bは未受験、誤答に数えない）
+OK  ipad: B問1（コード）で横はみ出しなし
+OK  ipad: コードは枠内または横スクロール
+OK  ipad: B問2（表・コード）で横はみ出しなし
+OK  ipad: 期限後の復帰で自動提出（経過10分）
+OK  ipad: 提出時刻は期限の時刻
+OK  ipad: 未回答も記録
+OK  ipad: 両セット完了
+OK  ipad: 再受験の開始前表示
+OK  ipad: 再受験を2回目として記録・時間切れで自動提出
+OK  ipad: 結果に自動提出と表示
+OK  ipad: 日のテキストで初回と再受験を区別
+OK  ipad: メモを出力に反映
+OK  ipad: 通常学習のデータを変更しない
+OK  ipad: 第3回模試の記録を変更しない
+OK  ipad: 追加したキーは fe_daily_ のみ (fe_daily_notes,fe_daily_results,fe_alog_v1,fe_mock_r3_results)
+OK  ipad: 第3回模試の画面と受験記録を表示
+OK  ipad: 通常学習画面に「今日の学習」の導線
+OK  ipad: 翌日に開くと今日（11/14）は未作成
+OK  ipad: 過去の課題と結果を開ける
+OK  ipad: コンソールエラーなし 
+OK  ipadL: 日本時間の今日の日付
+OK  ipadL: 今日の目標を表示
+OK  ipadL: 2セットとも未受験
+OK  ipadL: 問題数と制限時間
+OK  ipadL: 翌日の課題は未作成と表示
+OK  ipadL: 開始前の画面にセットの目標
+OK  ipadL: 開始時の残り時間 7:30
+OK  ipadL: 受験中は正解を表示しない
+OK  ipadL: 問4（表）で横はみ出しなし
+OK  ipadL: 問2（SQL・表）で横はみ出しなし
+OK  ipadL: 問1 20秒・回答変更1回 (20000)
+OK  ipadL: 問2 初回10秒＋再訪10秒・表示2回 ({"ms":19990,"firstMs":10000,"revisitMs":9990,"visits":2,"changes":0,"history":[{"t":53000,"v":"ウ"}]})
+OK  ipadL: 問4 15秒
+OK  ipadL: 非表示60秒は hiddenMs にだけ記録 (60000)
+OK  ipadL: 設問別合計＋非表示＝経過（二重加算なし） 54990+60000=114990
+OK  ipadL: 保留を記録
+OK  ipadL: 再読込後 回答3問を復元
+OK  ipadL: 再読込後の残り時間 残り 5:35 → 残り 5:34
+OK  ipadL: 再開回数1
+OK  ipadL: 二重クリックでも結果は1件
+OK  ipadL: 提出後は受験中データを削除
+OK  ipadL: 採点 2／5
+OK  ipadL: 最初の誤答（問2）を優先表示
+OK  ipadL: 優先問題を問3に変更
+OK  ipadL: 結果画面で横はみ出しなし
+OK  ipadL: 理由と優先問題を保存
+OK  ipadL: 解説を開いていた時間を受験時間とは別に記録 (5000)
+OK  ipadL: 解説を見ても受験記録は変わらない
+OK  ipadL: セットのGPT用テキストに時間・理由・非表示時間
+OK  ipadL: Aは完了・Bは未受験
+OK  ipadL: 日のテキスト（Bは未受験、誤答に数えない）
+OK  ipadL: B問1（コード）で横はみ出しなし
+OK  ipadL: コードは枠内または横スクロール
+OK  ipadL: B問2（表・コード）で横はみ出しなし
+OK  ipadL: 期限後の復帰で自動提出（経過10分）
+OK  ipadL: 提出時刻は期限の時刻
+OK  ipadL: 未回答も記録
+OK  ipadL: 両セット完了
+OK  ipadL: 再受験の開始前表示
+OK  ipadL: 再受験を2回目として記録・時間切れで自動提出
+OK  ipadL: 結果に自動提出と表示
+OK  ipadL: 日のテキストで初回と再受験を区別
+OK  ipadL: メモを出力に反映
+OK  ipadL: 通常学習のデータを変更しない
+OK  ipadL: 第3回模試の記録を変更しない
+OK  ipadL: 追加したキーは fe_daily_ のみ (fe_daily_notes,fe_daily_results,fe_alog_v1,fe_mock_r3_results)
+OK  ipadL: 第3回模試の画面と受験記録を表示
+OK  ipadL: 通常学習画面に「今日の学習」の導線
+OK  ipadL: 翌日に開くと今日（11/14）は未作成
+OK  ipadL: 過去の課題と結果を開ける
+OK  ipadL: コンソールエラーなし 
