@@ -1,0 +1,649 @@
+# -*- coding: utf-8 -*-
+"""2026-11-14 の「今日の学習」セット（科目A 5問・科目B 2問）を生成し、検算する。
+
+正答・誤答選択肢は、問題文の条件を入力にした独立の計算（sqlite3・時刻の重なり・Fraction・
+疑似言語をPythonで再現したコード）から求め、解答群の値と一致することを assert で確認する。
+出力:
+  src/daily/data/2026-11-14.json
+  tools/daily/out/20261114_check.log
+  tools/daily/out/20261114_manuscript.md
+実行: python3 -I tools/daily/build_20261114.py （リポジトリのルートで）
+"""
+import sqlite3, json, os, random, itertools
+from fractions import Fraction
+from collections import deque
+from datetime import datetime, timedelta
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DATE = "2026-11-14"
+OUT_JSON = os.path.join(ROOT, "src", "daily", "data", DATE + ".json")
+OUT_DIR = os.path.join(ROOT, "tools", "daily", "out")
+LOG = []
+LABELS = ["ア", "イ", "ウ", "エ", "オ", "カ"]
+
+
+def log(*a):
+    LOG.append(" ".join(str(x) for x in a))
+
+
+def P(text):
+    return {"t": "p", "text": text}
+
+
+def CODE(text):
+    return {"t": "code", "text": text}
+
+
+def TABLE(header, rows, caption=None):
+    d = {"t": "table", "header": header, "rows": rows}
+    if caption:
+        d["caption"] = caption
+    return d
+
+
+def common(qid, subject, field, cat, topic, skill, measures, sec, review_of=None, related_to=None):
+    return {
+        "id": qid, "version": 1, "subject": subject, "field": field, "cat": cat, "topic": topic,
+        "skill": skill, "measures": measures, "difficulty": "標準", "expected_seconds": sec,
+        "kind": "similar" if review_of else "new", "review_of": review_of, "related_to": related_to,
+        "source_style": "IPA本番形式準拠・オリジナル（2026-11-14 新作）",
+    }
+
+
+def finish(q, items, fmt_choice):
+    """items: [(値, 理由)]（並び順＝解答群の順）。理由が "正解" のものが正答。"""
+    q["choices"] = [dict({"label": LABELS[i]}, **fmt_choice(v)) for i, (v, _) in enumerate(items)]
+    q["correct"] = LABELS[[i for i, it in enumerate(items) if it[1] == "正解"][0]]
+    q["verify"] = [{"label": LABELS[i], "value": fmt_choice(v).get("cols", fmt_choice(v).get("text")), "reason": why} for i, (v, why) in enumerate(items)]
+    return q
+
+
+# ------------------------------------------------------------------ A1 外部結合と集計（復習元 D1113A02）
+def q_a1():
+    depts = [("D1", "総務"), ("D2", "営業"), ("D3", "開発"), ("D4", "品質")]
+    emps = [("E01", "D1", "在籍"), ("E02", "D2", "在籍"), ("E03", "D2", "休職"), ("E04", "D3", "在籍"), ("E05", "D3", "在籍"),
+            ("E06", "D4", "退職"), ("E07", "D2", "在籍"), ("E08", "D4", "退職"), ("E09", "D1", "休職")]
+    db = sqlite3.connect(":memory:")
+    db.execute("CREATE TABLE 部署(部署コード TEXT PRIMARY KEY, 部署名 TEXT)")
+    db.execute("CREATE TABLE 社員(社員番号 TEXT PRIMARY KEY, 部署コード TEXT, 在籍区分 TEXT)")
+    db.executemany("INSERT INTO 部署 VALUES(?,?)", depts)
+    db.executemany("INSERT INTO 社員 VALUES(?,?,?)", emps)
+    sql = ("SELECT 部署.部署名, COUNT(社員.社員番号) AS 人数\n"
+           "  FROM 部署 LEFT OUTER JOIN 社員\n"
+           "    ON 部署.部署コード = 社員.部署コード\n"
+           "   AND 社員.在籍区分 = '在籍'\n"
+           " GROUP BY 部署.部署コード, 部署.部署名\n"
+           "HAVING COUNT(社員.社員番号) <= 1")
+    run = lambda s: db.execute(s + "\n ORDER BY 部署.部署コード").fetchall()
+    ok = run(sql)
+    v_star = run(sql.replace("COUNT(社員.社員番号) AS", "COUNT(*) AS").replace("HAVING COUNT(社員.社員番号)", "HAVING COUNT(*)"))
+    v_nocond = run(sql.replace("\n   AND 社員.在籍区分 = '在籍'", ""))
+    v_where = run(sql.replace("\n   AND 社員.在籍区分 = '在籍'", "").replace(" GROUP BY", " WHERE 社員.在籍区分 = '在籍'\n GROUP BY"))
+    joined = db.execute("SELECT 部署.部署コード, 社員.社員番号 FROM 部署 LEFT OUTER JOIN 社員 ON 部署.部署コード = 社員.部署コード AND 社員.在籍区分 = '在籍' ORDER BY 1, 2").fetchall()
+    log("A1: 結合結果", joined)
+    log("A1: 正しいSQLの結果", ok, "／COUNT(*)", v_star, "／在籍区分の条件を読み落とす", v_nocond, "／条件をWHEREと同じに扱う", v_where)
+    assert ok == [("総務", 1), ("品質", 0)]
+    assert v_star == [("総務", 1), ("品質", 1)]
+    assert v_nocond == []
+    assert v_where == [("総務", 1)]
+    fmt = lambda rows: {"text": "、".join(f"（{a}, {b}）" for a, b in rows) + f"の{len(rows)}行" if rows else "結果は0行（該当する行がない）"}
+    items = [
+        (v_nocond, "ON 句の在籍区分の条件を読み落とし、休職・退職の社員も数えた（総務2人・品質2人で該当なし）"),
+        (v_where, "在籍区分の条件を WHERE 句と同じに扱い、在籍の社員がいない品質の行を除いた"),
+        (ok, "正解"),
+        (v_star, "COUNT(列名) を COUNT(*) と同じに扱い、結合相手のない品質の行も1人と数えた"),
+    ]
+    q = common("D1114A01", "A", "テクノロジ", "データベース", "部署ごとの在籍人数を外部結合と集計で求め、集計後の条件で絞り込む", "表読解", "表とSQLの照合（外部結合・ON条件・COUNT・HAVING）", 110, review_of="D1113A02")
+    q["body"] = [
+        P("社員の所属を管理するデータベースに、表“部署”と表“社員”がある。表“社員”の在籍区分は '在籍'、'休職'、'退職' のいずれかである。"),
+        TABLE(["部署コード", "部署名"], [list(d) for d in depts], "部署"),
+        TABLE(["社員番号", "部署コード", "在籍区分"], [list(e) for e in emps], "社員"),
+        P("次の SQL 文を実行して得られる結果はどれか。結果の各行は（部署名, 人数）で示す。"),
+        CODE(sql),
+    ]
+    finish(q, items, fmt)
+    q["explanation"] = (
+        "左外部結合なので、部署の4行はすべて残る。社員の行は、部署コードが一致し、かつ在籍区分が '在籍' のときだけ結び付く。結び付く社員がない部署は、社員の列が NULL の1行になる。"
+        "結合後の行は、総務－E01、営業－E02、営業－E07、開発－E04、開発－E05、品質－NULL（E03・E09 は休職、E06・E08 は退職なので結び付かない）。"
+        "COUNT(社員.社員番号) は NULL を数えないので、人数は総務1、営業2、開発2、品質0。HAVING で1以下の総務と品質が残る。"
+        "アは、ON 句の在籍区分の条件を読み落とした場合で、総務2（E01・E09）、営業3、開発2、品質2 となり該当なし。"
+        "イは、在籍区分の条件を WHERE 句と同じに扱った場合で、品質の NULL の行が除かれ、総務だけが残る。"
+        "エは、COUNT(列名) を COUNT(*) と同じに扱い、品質の NULL の行も1人と数えた場合。"
+        "〔検算〕sqlite3 に同じ表を作って SQL 文を実行し、（総務, 1）、（品質, 0）を確認。各誤答の読み違いを再現した SQL 文でもア・イ・エの結果になることを確認。"
+    )
+    q["explain"] = [TABLE(["部署", "結び付く社員（在籍だけ）", "COUNT(社員.社員番号)", "COUNT(*)", "条件を読み落とした場合", "HAVING ≦ 1"], [
+        ["総務", "E01（E09 は休職）", "1", "1", "2", "○"],
+        ["営業", "E02, E07（E03 は休職）", "2", "2", "3", "×"],
+        ["開発", "E04, E05", "2", "2", "2", "×"],
+        ["品質", "なし（E06, E08 は退職）→ NULL の1行", "0", "1", "2", "○"]], "結合後の行と人数")]
+    return q
+
+
+# ------------------------------------------------------------------ A2 バックアップ（短い事例）
+def q_a2():
+    days = ["日", "月", "火", "水"]
+    rnd = random.Random(1114)
+    ok_cnt = 0
+    for trial in range(2000):
+        files = {f"f{i}": 0 for i in range(8)}
+        state = {}
+        changed_since_full = set()
+        backups = {}
+        for d in days:
+            if d != "日":
+                for f in rnd.sample(list(files), rnd.randint(0, 4)):
+                    files[f] += 1
+                    changed_since_full.add(f)
+            if d == "日":
+                backups["日:フル"] = dict(files); changed_since_full = set()
+            else:
+                backups[f"{d}:差分"] = {f: files[f] for f in changed_since_full}
+        target = dict(files)
+        def restore(names):
+            st = {}
+            for nm in names:
+                st.update(backups[nm])
+            return st
+        assert restore(["日:フル", "水:差分"]) == target
+        assert restore(["日:フル", "月:差分", "火:差分", "水:差分"]) == target
+        if restore(["水:差分"]) != target:
+            ok_cnt += 1
+        if trial == 0:
+            log("A2: 例 水曜時点", target, "／日曜フル＋水曜差分", restore(["日:フル", "水:差分"]))
+    log(f"A2: 2,000通りの変更パターンで、日曜フル＋水曜差分（2個）で水曜23:00の状態に戻ることを確認。水曜差分だけでは {ok_cnt} 通りで戻らない")
+    assert ok_cnt > 1500
+    items = [
+        ("日曜日のフルバックアップと水曜日の差分バックアップ", "正解"),
+        ("日曜日のフルバックアップと月曜日・火曜日・水曜日の差分バックアップ", "増分バックアップと取り違えた。差分は日曜日以降の変更をすべて含むので、月・火の差分は不要（最小限ではない）"),
+        ("水曜日の差分バックアップだけ", "差分には日曜日以降に変更されたデータしかなく、変更のないデータを戻せない"),
+        ("日曜日のフルバックアップだけ", "月曜日から水曜日までの変更が戻らない"),
+    ]
+    q = common("D1114A02", "A", "テクノロジ", "システム構成（バックアップ）", "差分バックアップの運用で、復旧に必要なバックアップを選ぶ", "知識・事例", "事例の条件の読み取り", 60)
+    q["body"] = [
+        P("あるファイルサーバでは、毎週日曜日の 23:00 にフルバックアップを取得し、月曜日から土曜日までは毎日 23:00 に差分バックアップを取得している。差分バックアップには、直前のフルバックアップの取得以降に変更されたデータを記録する。"),
+        P("木曜日の 10:00 にディスクが故障したので、水曜日の 23:00 の時点の状態にデータを復旧する。復旧に使うバックアップとして、必要最小限の組合せはどれか。"),
+    ]
+    finish(q, items, lambda v: {"text": v})
+    q["explanation"] = (
+        "差分バックアップは、直前のフルバックアップ（日曜日）以降に変更されたデータをすべて含む。水曜日の差分には月曜日から水曜日までの変更が入っているので、日曜日のフルバックアップを戻した後に水曜日の差分を戻せば、水曜日 23:00 の状態になる。"
+        "イは、前回のバックアップ以降の変更だけを記録する増分バックアップの復旧手順で、差分方式では月・火の差分は不要（最小限ではない）。"
+        "ウは、差分に含まれない（日曜日以降に変更されていない）データを戻せない。エは、月曜日から水曜日までの変更が戻らない。"
+        "〔検算〕ファイルの変更パターンを2,000通り作って模擬し、日曜フル＋水曜差分の2つで水曜日の状態に一致すること、水曜差分だけでは一致しない場合があることを確認。"
+    )
+    q["explain"] = [TABLE(["方式", "毎日のバックアップに記録するもの", "水曜日の状態への復旧に使うもの"], [
+        ["差分（この問題）", "直前のフルバックアップ以降の変更すべて", "日曜フル＋水曜差分"],
+        ["増分", "前回のバックアップ以降の変更", "日曜フル＋月・火・水の増分"]], "差分と増分の違い")]
+    return q
+
+
+# ------------------------------------------------------------------ A3 目標利益に必要な売上高（関連 D1113A05）
+def q_a3():
+    sales = 4000
+    var = {"材料費": 1800, "販売手数料": 800}
+    fix = {"人件費": 1000, "地代家賃": 300, "減価償却費": 170}
+    profit = sales - sum(var.values()) - sum(fix.values())
+    assert profit == -70
+    vr = Fraction(sum(var.values()), sales)
+    cm = 1 - vr
+    F = sum(fix.values()); target = 350
+    ok = Fraction(F + target) / cm
+    w_vr = Fraction(F + target) / vr
+    w_bep = Fraction(F) / cm
+    w_add = w_bep + target
+    log("A3: 変動費率", vr, "限界利益率", cm, "固定費", F, "今月の営業利益", profit)
+    log("A3: 正解", ok, "／変動費率で割る", w_vr, "／損益分岐点", w_bep, "／損益分岐点＋目標利益", w_add)
+    assert ok - ok * vr - F == target  # 逆算
+    assert (ok, w_vr, w_bep, w_add) == (5200, 2800, 4200, 4550)
+    items = sorted([(w_vr, "限界利益率ではなく変動費率（0.65）で割った"), (w_bep, "目標利益を加えずに損益分岐点売上高を求めた"),
+                    (w_add, "損益分岐点売上高に目標利益をそのまま足した（目標利益も限界利益率で割る必要がある）"), (ok, "正解")])
+    q = common("D1114A03", "A", "ストラテジ", "企業活動（会計・財務）", "損益の表から変動費と固定費を分け、目標利益を達成する売上高を求める", "計算", "表から必要な値を選んで立式", 90, related_to="D1113A05")
+    q["body"] = [
+        P("B社の今月の損益を表に示す。来月も、売上高に対する変動費の割合（変動費率）と固定費は今月と変わらないものとする。来月に営業利益 350万円を達成するために必要な売上高は何万円か。"),
+        TABLE(["項目", "金額（万円）", "区分"], [["売上高", f"{sales:,}", "－"]] + [[k, f"{v:,}", "変動費"] for k, v in var.items()]
+              + [[k, f"{v:,}", "固定費"] for k, v in fix.items()] + [["営業利益", "△70", "－"]], "今月の損益（△は損失）"),
+    ]
+    finish(q, items, lambda v: {"text": f"{int(v):,}"})
+    q["explanation"] = (
+        "変動費は材料費と販売手数料で 1,800＋800＝2,600万円。変動費率は 2,600÷4,000＝0.65、限界利益率は 1－0.65＝0.35。固定費は 1,000＋300＋170＝1,470万円。"
+        "必要な売上高は（固定費＋目標利益）÷限界利益率＝（1,470＋350）÷0.35＝5,200万円。"
+        "（確かめ：5,200－5,200×0.65－1,470＝5,200－3,380－1,470＝350。）"
+        "アの 2,800 は、変動費率 0.65 で割った場合。イの 4,200 は、目標利益を加えずに損益分岐点売上高（1,470÷0.35）を求めた場合。"
+        "ウの 4,550 は、損益分岐点売上高 4,200 に目標利益 350 をそのまま足した場合。売上高が1万円増えても利益は 0.35万円しか増えないので、目標利益の分も限界利益率で割る。"
+        "〔検算〕Fraction で変動費率・限界利益率を求めて計算し、求めた売上高から営業利益を逆算して 350万円になることを確認。"
+    )
+    q["explain"] = [TABLE(["手順", "式", "値"], [
+        ["変動費率", "（1,800＋800）÷4,000", "0.65"], ["限界利益率", "1－0.65", "0.35"], ["固定費", "1,000＋300＋170", "1,470万円"],
+        ["必要な売上高", "（1,470＋350）÷0.35", "5,200万円"]], "計算の手順")]
+    return q
+
+
+# ------------------------------------------------------------------ A4 SLA（復習元 D1113A04）
+def q_a4():
+    days, s0h, e0h = 30, 6, 24
+    total = days * (e0h - s0h) * 60
+    base = datetime(2000, 1, 1)
+    T = lambda d, h, m: base + timedelta(days=d, hours=h, minutes=m)
+    # (日, 開始, 終了, 種別, 合意済みの計画停止か)
+    events = [
+        ("3日", T(3, 5, 30), T(3, 6, 20), "障害", False),
+        ("10日", T(10, 23, 40), T(11, 1, 10), "障害（翌日 1:10 に復旧）", False),
+        ("17日", T(17, 2, 0), T(17, 4, 0), "計画停止（事前に合意済み）", True),
+        ("21日", T(21, 13, 0), T(21, 13, 30), "緊急メンテナンス（事前の合意なし）", False),
+        ("26日", T(26, 9, 15), T(26, 9, 25), "障害", False),
+    ]
+
+    def overlap(s, e):
+        m = 0
+        d = s.replace(hour=0, minute=0)
+        while d < e:
+            a, b = max(s, d + timedelta(hours=s0h)), min(e, d + timedelta(hours=e0h))
+            if b > a:
+                m += int((b - a).total_seconds() // 60)
+            d += timedelta(days=1)
+        return m
+
+    cnt = {d: (0 if agreed else overlap(s, e)) for d, s, e, k, agreed in events}
+    stop = sum(cnt.values())
+    raw = {d: int((e - s).total_seconds() // 60) for d, s, e, k, agreed in events}
+    rate = lambda m: Fraction(total - m, total) * 100
+
+    def r2(fr):
+        v = fr * 100
+        n = int(v)
+        if v - n >= Fraction(1, 2):
+            n += 1
+        return f"{n // 100}.{n % 100:02d}"
+    goal = Fraction(998, 10)
+    v_exclude_emerg = stop - cnt["21日"]                         # 緊急メンテナンスも計画停止として除いた
+    v_noclip = sum(raw[d] for d in ["3日", "10日", "21日", "26日"])  # 提供時間外も含めた
+    v_midnight = stop - cnt["10日"] + raw["10日"]                 # 日をまたぐ障害を全部数えた
+    for d, s, e, k, agreed in events:
+        log(f"A4: {d} {s:%H:%M}-{e:%H:%M} {k} → 数える分数 {cnt[d]}（停止全体 {raw[d]}分）")
+    log("A4: 提供時間", total, "分　許容停止", total * (100 - goal) / 100, "分　停止合計", stop, "→", r2(rate(stop)))
+    assert stop == 80 and r2(rate(stop)) == "99.75" and rate(stop) < goal
+    items = sorted([
+        (rate(v_noclip), "障害を提供時間外の部分も含めて数えた（3日50分・10日90分）"),
+        (rate(v_midnight), "日をまたぐ10日の障害を、翌日 0:00～1:10（提供時間外）も含めて90分数えた"),
+        (rate(stop), "正解"),
+        (rate(v_exclude_emerg), "事前の合意がない緊急メンテナンスも計画停止として除いた"),
+    ])
+    for fr, why in items:
+        log(f"A4: {r2(fr)}％ {'達成' if fr >= goal else '未達成'} … {why}")
+    q = common("D1114A04", "A", "マネジメント", "サービスマネジメント", "提供時間と停止区間の重なりから停止時間を数え、稼働率の目標達成を判断する", "計算", "条件の読み取り＋時刻の重なりの計算", 120, review_of="D1113A04")
+    q["body"] = [
+        P("あるオンライン予約サービスの SLA では、サービス提供時間を毎日 6:00～24:00、稼働率の目標を 99.8％以上と合意している。停止時間には、サービス提供時間内に停止していた時間だけを数える。ただし、事前に合意した計画停止の時間は停止時間に含めない。"),
+        P("稼働率 ＝（サービス提供時間 － 停止時間）÷ サービス提供時間"),
+        P("30日間の月に発生した停止を表に示す。この月の稼働率（％、小数第3位を四捨五入）と、目標の達成状況の組合せとして正しいものはどれか。"),
+        TABLE(["日", "停止した時刻", "種別"], [[d, f"{s.hour}:{s:%M}～{e.hour}:{e:%M}", k] for d, s, e, k, _ in events], "この月の停止"),
+    ]
+    q["choice_header"] = ["稼働率", "目標"]
+    finish(q, items, lambda fr: {"cols": [r2(fr) + "％", "達成" if fr >= goal else "未達成"]})
+    q["explanation"] = (
+        "サービス提供時間は 18時間×30日＝540時間＝32,400分。目標 99.8％で許される停止は 32,400×0.002＝64.8分。"
+        "3日の障害は 6:00 からの20分だけ数える。10日の障害は 23:40～24:00 の20分だけ数え、翌日 0:00～1:10 は提供時間外。17日は合意済みの計画停止で、しかも提供時間外。"
+        "21日の緊急メンテナンスは事前の合意がないので計画停止として除かず、30分を数える。26日は10分。"
+        "停止時間は 20＋20＋30＋10＝80分で、稼働率は（32,400－80）÷32,400＝0.99753…、小数第3位を四捨五入して 99.75％。99.8％に届かないので未達成。"
+        "アの 99.44％は、3日と10日の障害を提供時間外の部分も含めて数えた場合（180分）。イの 99.54％は、日をまたぐ10日の障害を90分全部数えた場合（150分）。"
+        "エの 99.85％は、緊急メンテナンスも計画停止として除いた場合（50分）で、目標を達成していると誤って判断する。"
+        "〔検算〕停止ごとに、各日の 6:00～24:00 との重なりを時刻の計算で求め（日をまたぐ停止は日ごとに分ける）、合計80分から有理数で稼働率を計算して 99.75％を確認。各誤答の数え方でも同じ計算をした。"
+    )
+    q["explain"] = [TABLE(["日", "停止", "数える分数", "理由"], [
+        ["3日", "5:30～6:20", "20", "6:00 より前は提供時間外"],
+        ["10日", "23:40～翌1:10", "20", "翌日 0:00～1:10 は提供時間外"],
+        ["17日", "2:00～4:00", "0", "合意済みの計画停止（提供時間外でもある）"],
+        ["21日", "13:00～13:30", "30", "事前の合意がないので除かない"],
+        ["26日", "9:15～9:25", "10", "全部提供時間内"],
+        ["合計", "", "80", "許容は64.8分"]], "停止時間の数え方")]
+    return q
+
+
+# ------------------------------------------------------------------ A5 デジタル署名（短い知識・事例）
+def q_a5():
+    # 署名・検証の組合せを模擬：秘密鍵で作った署名は、対になる公開鍵でだけ検証できる
+    pairs = {"A": ("A秘", "A公"), "B": ("B秘", "B公")}
+    sign_key = pairs["A"][0]
+    verifiable = [k for k in ["A秘", "A公", "B秘", "B公"] if (sign_key, k) == pairs["A"]]
+    log("A5: A の秘密鍵で作った署名を検証できる鍵", verifiable)
+    assert verifiable == ["A公"]
+    items = [
+        ("A さんの秘密鍵", "署名の作成に使う鍵。A さん本人しか持たないので、B さんは使えない"),
+        ("A さんの公開鍵", "正解"),
+        ("B さんの秘密鍵", "暗号化された内容を B さんが復号するときに使う鍵で、署名の検証には使わない"),
+        ("B さんの公開鍵", "B さんあての暗号化に使う鍵で、A さんの署名の検証には使えない"),
+    ]
+    q = common("D1114A05", "A", "テクノロジ", "情報セキュリティ", "電子メールのデジタル署名を受信者が検証するときの鍵を選ぶ", "知識", "短い事例の読み取り", 45)
+    q["body"] = [
+        P("A さんは、B さんに送る電子メールに、公開鍵暗号方式を用いたデジタル署名を付けた。B さんが、メールが A さんから送られたことと、途中で改ざんされていないことを確かめるときに使う鍵はどれか。"),
+    ]
+    finish(q, items, lambda v: {"text": v})
+    q["explanation"] = (
+        "デジタル署名は、送信者がメッセージのハッシュ値を自分の秘密鍵で処理して作る。受信者は送信者の公開鍵で署名を検証し、メッセージから求めたハッシュ値と一致すれば、送信者本人が作ったこと（秘密鍵は本人しか持たない）と改ざんがないことを確かめられる。"
+        "したがって B さんが使うのは A さんの公開鍵。アの A さんの秘密鍵は署名の作成に使う鍵で、B さんは持っていない。"
+        "ウ・エの B さんの鍵の組は、B さんあての内容を暗号化（B さんの公開鍵）・復号（B さんの秘密鍵）するときに使い、A さんの署名の検証には使えない。"
+        "〔検算〕秘密鍵と公開鍵の対応を模擬し、A さんの秘密鍵で作った署名を検証できるのは A さんの公開鍵だけであることを確認。"
+    )
+    q["explain"] = [TABLE(["目的", "送信者 A が使う鍵", "受信者 B が使う鍵"], [
+        ["デジタル署名（なりすまし・改ざんの確認）", "A の秘密鍵（署名の作成）", "A の公開鍵（署名の検証）"],
+        ["暗号化（内容の秘匿）", "B の公開鍵（暗号化）", "B の秘密鍵（復号）"]], "鍵の使い分け")]
+    return q
+
+
+# ------------------------------------------------------------------ B1 配列の折返し（復習元 D1113B01）
+B1_CODE = """○整数型: longestRun(整数型の配列: temp, 整数型: head, 整数型: limit)
+  整数型: n ← temp の要素数
+  整数型: run ← 0
+  整数型: best ← 0
+  整数型: k, p
+  for (k を 1 から n まで 1 ずつ増やす)
+    p ← ((head ＋ k − 1) mod n) ＋ 1
+    if (temp[p] ≧ limit)
+      run ← run ＋ 1
+      if (run ＞ best)
+        best ← run
+      endif
+    else
+      run ← 0
+    endif
+  endfor
+  return best"""
+
+
+def longest_run(temp, head, limit, *, mode="ok", trace=None):
+    n = len(temp)
+    run = best = 0
+    for k in range(1, n + 1):
+        if mode == "from1":
+            p = k
+        else:
+            p = ((head + k - 1) % n) + 1
+        v = temp[p - 1]
+        hit = v > limit if mode == "gt" else v >= limit
+        if hit:
+            run += 1
+            if run > best:
+                best = run
+        elif mode != "noreset":
+            run = 0
+        if trace is not None:
+            trace.append((k, p, v, hit, run, best))
+    return best
+
+
+def brute_run(temp, head, limit):
+    n = len(temp)
+    order = [temp[(head + i) % n] for i in range(n)]  # 最も古い値（head の次）から最も新しい値（head）まで
+    best = cur = 0
+    for v in order:
+        cur = cur + 1 if v >= limit else 0
+        best = max(best, cur)
+    return best
+
+
+def q_b1():
+    T = [27, 25, 23, 26, 29, 22, 28, 26]
+    head, limit = 5, 25
+    tr = []
+    ok = longest_run(T, head, limit, trace=tr)
+    for t in tr:
+        log("B1: 追跡 (k, p, temp[p], 条件, run, best) =", t)
+    assert ok == 4 and brute_run(T, head, limit) == ok
+    rnd = random.Random(20261114)
+    for _ in range(5000):
+        n = rnd.randint(1, 10)
+        arr = [rnd.randint(20, 32) for _ in range(n)]
+        h = rnd.randint(1, n)
+        lim = rnd.randint(20, 32)
+        assert longest_run(arr, h, lim) == brute_run(arr, h, lim)
+    log("B1: ランダム入力5,000件で、プログラムの戻り値と問題文の意味（古い日から新しい日の順の最長連続日数）が一致")
+    v_from1 = longest_run(T, head, limit, mode="from1")
+    v_gt = longest_run(T, head, limit, mode="gt")
+    v_noreset = longest_run(T, head, limit, mode="noreset")
+    log("B1: 正解", ok, "／要素1から調べる", v_from1, "／≧を＞と読む", v_gt, "／run を0に戻さない", v_noreset)
+    assert (v_from1, v_gt, v_noreset) == (2, 3, 6)
+    items = sorted([(v_from1, "head を使わず、要素番号1から順に調べた（古い日からの順になっていない）"), (v_gt, "temp[p] ≧ limit を ＞ と読み、25℃ちょうどの日を数えなかった"),
+                    (ok, "正解"), (v_noreset, "else の run ← 0 を読み落とし、limit 以上の日を通算した")])
+    q = common("D1114B01", "B", "アルゴリズムとプログラミング", "配列の探索", "循環して記録した気温から、条件を満たす日が続いた最長の日数を求める", "追跡", "ループの回数と実際の添字の対応・折返し・連続条件の更新", 270, review_of="D1113B01")
+    q["body"] = [
+        P("ある気象観測装置は、直近 n 日の最高気温を、要素数 n の配列 temp に記録する。1日分の値を記録するときは、最も古い日の値が入っている要素に新しい値を上書きする。変数 head には、最も新しい日の値が入っている要素番号が格納されている。最も古い日の値は要素番号 head ＋ 1 の要素に入っていて、head が n のときは要素番号1の要素に入っている。配列の要素番号は1から始まる。"),
+        P("関数 longestRun は、記録されている n 日分の値を、最も古い日から最も新しい日まで日付の順に調べ、最高気温が limit 以上だった日が連続した最も長い日数を返す。最も新しい日と最も古い日は連続した日ではない。また、x mod y は x を y で割った余りを表す。"),
+        P("配列 T と変数 h が次のとおりのとき、longestRun(T, h, 25) の戻り値はどれか。"),
+        P("T ＝ {27, 25, 23, 26, 29, 22, 28, 26}、h ＝ 5"),
+        P("〔プログラム〕"),
+        CODE(B1_CODE),
+    ]
+    finish(q, items, lambda v: {"text": str(v)})
+    q["explanation"] = (
+        "n＝8、head＝5 なので、最も新しい日は要素5、最も古い日は要素6。p ＝ ((5 ＋ k − 1) mod 8) ＋ 1 は、k＝1 のとき6、k＝2 のとき7、k＝3 のとき8、k＝4 のとき1（要素8の次は要素1に戻る）… k＝8 のとき5 になる。"
+        "日付の順の値は 22、28、26、27、25、23、26、29。25 以上が続くのは 28、26、27、25 の4日（要素7、8、1、2）で、要素3 の 23 で run が0に戻る。その後の 26、29 は2日。戻り値は4。"
+        "アの 2 は、head を使わずに要素1から順に調べた場合（27、25 ／ 26、29 ／ 28、26 がそれぞれ2日）。"
+        "イの 3 は、≧ を ＞ と読み、25 ちょうどの要素2を数えなかった場合（28、26、27 の3日）。エの 6 は、else の run ← 0 を読み落とし、25 以上の日を通算した場合。"
+        "〔検算〕疑似言語を Python で再現して4を確認。別の手順として、head の次から並べ直した列で最長の連続日数を求めても4。ランダムな入力5,000件で両者が一致することを確認。各誤答の読み違いを再現したコードでもア・イ・エの値になることを確認。"
+    )
+    q["explain"] = [TABLE(["k（回数）", "p（要素番号）", "temp[p]", "25以上か", "run", "best"],
+                          [[str(k), str(p), str(v), "○" if hit else "×", str(r), str(b)] for k, p, v, hit, r, b in tr],
+                          "追跡表（k は繰返しの回数、p は実際に調べる要素番号。各行は if 文の処理の後の値）")]
+    return q
+
+
+# ------------------------------------------------------------------ B2 キュー（練習元 D1113B02）
+B2_CODE = """大域: 整数型: calls ← 0
+
+○整数型の配列: callBack(整数型の配列: need, 整数型: maxTry)
+  整数型の配列: done ← {}
+  整数型の配列: tries ← {need の要素数 個の 0}
+  Queue型: que ← 空のキュー
+  整数型: i, j
+  for (i を 1 から need の要素数 まで 1 ずつ増やす)
+    que.enqueue(i)
+  endfor
+  while (que.isEmpty() が false と等しい)
+    j ← que.dequeue()
+    tries[j] ← tries[j] ＋ 1
+    calls ← calls ＋ 1
+    if (tries[j] が need[j] と等しい)
+      done の末尾に j を追加する
+    elseif (tries[j] ＜ maxTry)
+      que.enqueue(j)
+    endif
+  endwhile
+  return done"""
+
+
+def call_back(need, max_try, *, mode="ok", trace=None):
+    n = len(need)
+    tries = [0] * n
+    done, calls = [], 0
+    con = deque(range(1, n + 1))
+    while con:
+        j = con.pop() if mode == "stack" else con.popleft()
+        tries[j - 1] += 1
+        calls += 1
+        if mode == "limitfirst":
+            if tries[j - 1] >= max_try:
+                res = "打切り"
+            elif tries[j - 1] == need[j - 1]:
+                res = "応答"
+            else:
+                res = "戻す"
+        else:
+            if tries[j - 1] == need[j - 1]:
+                res = "応答"
+            elif (tries[j - 1] <= max_try if mode == "le" else tries[j - 1] < max_try):
+                res = "戻す"
+            else:
+                res = "打切り"
+        if res == "応答":
+            done.append(j)
+        elif res == "戻す":
+            if mode == "front":
+                con.appendleft(j)
+            else:
+                con.append(j)
+        if trace is not None:
+            trace.append((calls, j, tries[j - 1], need[j - 1], res, list(con), list(done)))
+    return done, calls
+
+
+def q_b2():
+    need, max_try = [2, 1, 0, 3], 3
+    tr = []
+    ok = call_back(need, max_try, trace=tr)
+    for t in tr:
+        log("B2: 追跡 (calls, j, tries[j], need[j], 結果, キュー, done) =", t)
+    assert ok == ([2, 1, 4], 9)
+    # 別手順：各顧客の発信回数は、need が 1～maxTry なら need、そうでなければ maxTry
+    assert sum(x if 1 <= x <= max_try else max_try for x in need) == ok[1]
+    rnd = random.Random(1114)
+    for _ in range(3000):
+        m = rnd.randint(1, 6); mt = rnd.randint(1, 4)
+        nd = [rnd.randint(0, 5) for _ in range(m)]
+        d, c = call_back(nd, mt)
+        assert c == sum(x if 1 <= x <= mt else mt for x in nd)
+        assert sorted(d) == [i + 1 for i, x in enumerate(nd) if 1 <= x <= mt]
+        assert d == sorted(d, key=lambda i: (nd[i - 1], i))
+    log("B2: ランダム入力3,000件で、calls＝各顧客の発信回数の合計、done＝応答した顧客を（応答した回数, 番号）の順 を確認")
+    v_front = call_back(need, max_try, mode="front")
+    v_limit = call_back(need, max_try, mode="limitfirst")
+    v_le = call_back(need, max_try, mode="le")
+    v_stack = call_back(need, max_try, mode="stack")
+    log("B2: 正解", ok, "／戻した顧客を先頭へ", v_front, "／上限の判定を先に行う", v_limit, "／＜を≦と読む", v_le, "／スタック", v_stack)
+    assert v_front == ([1, 2, 4], 9) and v_limit == ([2, 1], 9) and v_le == ([2, 1, 4], 10) and v_stack == ([4, 2, 1], 9)
+    fmt = lambda v: {"cols": ["{" + ", ".join(map(str, v[0])) + "}", str(v[1])]}
+    items = [
+        (v_front, "戻した顧客がキューの先頭に入ると考え、同じ顧客に続けて発信した"),
+        (ok, "正解"),
+        (v_limit, "elseif の上限の判定を先に行うと考え、3回目で応答する顧客4を打ち切った"),
+        (v_le, "tries[j] ＜ maxTry を ≦ と読み、顧客3に4回目の発信をした"),
+        (v_stack, "キューを後入れ先出し（スタック）として扱った"),
+    ]
+    q = common("D1114B02", "B", "アルゴリズムとプログラミング", "キュー", "応答のなかった顧客に、上限の回数まで順番に電話をかけ直す", "追跡", "取出し・末尾への再投入・終了条件と回数の追跡", 300, related_to="D1113B02")
+    q["body"] = [
+        P("あるコールセンターでは、折り返しの電話を待つ顧客に、受付の順に電話をかける。応答がなかった顧客は待ち行列の末尾に並べ直し、ほかの顧客に電話をかけた後で、もう一度電話をかける。ただし、1人の顧客に電話をかける回数は maxTry 回までとし、maxTry 回かけても応答がなければその顧客への電話を打ち切る。"),
+        P("顧客には受付の順に1から番号が付いている。配列 need の要素 need[i] は、顧客 i が何回目の電話に応答するかを表し、0 はどの電話にも応答しないことを表す。配列の要素番号は1から始まる。"),
+        P("関数 callBack は、応答した顧客の番号を、応答した順に格納した配列を返す。待ち行列には顧客の番号を入れる。大域変数 calls は、電話をかけた回数の合計を数える。tries ← {need の要素数 個の 0} は、要素数が need と同じで、すべての要素が0の配列を生成する。"),
+        P("待ち行列は Queue型 で表す。Queue型: que ← 空のキュー によって要素のないキューを生成し、次の操作を使う。空のキューに対して dequeue を行うことはない。"),
+        TABLE(["操作", "説明"], [
+            ["que.enqueue(x)", "x をキューの末尾に追加する。"],
+            ["que.dequeue()", "キューの先頭の値をキューから取り除き、その値を返す。"],
+            ["que.isEmpty()", "キューが空であれば true を、そうでなければ false を返す。"],
+        ], "Queue型の操作"),
+        P("関数 callBack を、need ＝ {2, 1, 0, 3}、maxTry ＝ 3 として呼び出したとき、戻り値と、関数の処理が終わった時点の calls の値の組合せとして正しいものを、解答群の中から選べ。ここで、呼び出す前の calls は0である。"),
+        P("〔プログラム〕"),
+        CODE(B2_CODE),
+    ]
+    q["choice_header"] = ["戻り値", "calls"]
+    finish(q, items, fmt)
+    q["explanation"] = (
+        "キューには最初に顧客 1、2、3、4 の番号が並ぶ。取り出した顧客の tries を1増やし、tries が need と等しければ応答（done に追加）、そうでなく tries が maxTry＝3 未満なら末尾に戻し、どちらでもなければ打ち切る（キューに戻さない）。"
+        "1回目 顧客1（1回目、need 2 なので戻す）、2回目 顧客2（1回目で応答）、3回目 顧客3（1回目、戻す）、4回目 顧客4（1回目、戻す）、5回目 顧客1（2回目で応答）、"
+        "6回目 顧客3（2回目、戻す）、7回目 顧客4（2回目、戻す）、8回目 顧客3（3回目、応答せず 3 ＜ 3 でもないので打切り）、9回目 顧客4（3回目で応答）。キューが空になり終了。"
+        "戻り値は {2, 1, 4}、calls は9。"
+        "アは、戻した顧客が先頭に入ると考え、顧客1に続けて電話した場合。ウは、上限の判定を応答の判定より先に行うと考え、3回目で応答する顧客4を打ち切った場合。"
+        "エは、tries[j] ＜ maxTry を ≦ と読み、顧客3に4回目の電話をかけた場合（calls が1増える）。オは、キューを後から入れた番号を先に取り出すスタックとして扱った場合。"
+        "〔検算〕疑似言語を Python で再現して（{2, 1, 4}, 9）を確認。別の手順として、各顧客への電話の回数（顧客1：2、顧客2：1、顧客3：3、顧客4：3）の合計が9になることを確認。ランダムな入力3,000件でも同じ関係を確認。各誤答の読み違いを再現したコードでもア・ウ・エ・オの値になることを確認。"
+    )
+    q["explain"] = [TABLE(
+        ["calls", "取り出した顧客", "tries[j]", "need[j]", "結果", "処理後のキュー（先頭→末尾）", "done"],
+        [[str(c), str(j), str(t), str(nd), r, "、".join(map(str, qq)) if qq else "（空）", "{" + ", ".join(map(str, dd)) + "}"] for c, j, t, nd, r, qq, dd in tr],
+        "追跡表（各行は1回の繰返しの終わりの状態）")]
+    return q
+
+
+def check_question(q):
+    labels = [c["label"] for c in q["choices"]]
+    assert labels == LABELS[:len(labels)], q["id"]
+    vals = [json.dumps(c.get("cols", c.get("text")), ensure_ascii=False) for c in q["choices"]]
+    assert len(set(vals)) == len(vals), (q["id"], "選択肢の重複")
+    vr = [v for v in q["verify"] if v["reason"] == "正解"]
+    assert len(vr) == 1 and vr[0]["label"] == q["correct"]
+    for c, v in zip(q["choices"], q["verify"]):
+        assert c["label"] == v["label"] and (c.get("cols") or c.get("text")) == v["value"], (q["id"], c, v)
+    if q["subject"] == "A":
+        assert len(q["choices"]) == 4
+    # 解説で誤答として挙げた記号が、解答群の記号と一致すること
+    for v in q["verify"]:
+        if v["reason"] != "正解" and q["subject"] == "A":
+            assert v["label"] in q["explanation"], (q["id"], v["label"])
+    log(f"{q['id']}: 選択肢{len(labels)}個・正解 {q['correct']}・解答群と検算値が一致")
+
+
+def blocks_md(blocks):
+    out = []
+    for b in blocks:
+        if b["t"] == "p":
+            out.append(b["text"])
+        elif b["t"] == "code":
+            out.append("```\n" + b["text"] + "\n```")
+        elif b["t"] == "table":
+            if b.get("caption"):
+                out.append(f"〔{b['caption']}〕")
+            out.append("| " + " | ".join(b["header"]) + " |")
+            out.append("|" + "---|" * len(b["header"]))
+            out.extend("| " + " | ".join(r) + " |" for r in b["rows"])
+        out.append("")
+    return "\n".join(out)
+
+
+def write_manuscript(plan):
+    L = [f"# 今日の学習 {plan['date']} 問題原稿", "", f"計画ID: {plan['planId']}", "", plan["goal"], ""]
+    for s in plan["sets"]:
+        L += [f"## {s['setId']}（{s['title']}、制限 {s['limitSec']}秒）", "", s["goal"], "", "進め方: " + s["advice"], ""]
+        for i, q in enumerate(s["questions"]):
+            ref = (f"復習元 {q['review_of']}" if q["review_of"] else "") + (f"関連 {q['related_to']}" if q.get("related_to") else "")
+            L += [f"### 問{i + 1} {q['id']}　{q['field']}／{q['cat']}　{ref}", "", f"測定する技能: {q['measures']}　想定所要時間: {q['expected_seconds']}秒（作問上の見積り）", "", blocks_md(q["body"])]
+            if q.get("choice_header"):
+                L.append("| 解答群 | " + " | ".join(q["choice_header"]) + " |")
+                L.append("|" + "---|" * (len(q["choice_header"]) + 1))
+                L += ["| " + c["label"] + " | " + " | ".join(c["cols"]) + " |" for c in q["choices"]]
+            else:
+                L += [f"{c['label']}　{c['text']}" for c in q["choices"]]
+            L += ["", f"**正解 {q['correct']}**", "", q["explanation"], "", blocks_md(q.get("explain", [])), "誤答選択肢の理由:"]
+            L += [f"- {v['label']}: {v['reason']}" for v in q["verify"]]
+            L.append("")
+    with open(os.path.join(OUT_DIR, DATE.replace("-", "") + "_manuscript.md"), "w", encoding="utf-8") as f:
+        f.write("\n".join(L))
+
+
+def main():
+    qa = [q_a1(), q_a2(), q_a3(), q_a4(), q_a5()]
+    qb = [q_b1(), q_b2()]
+    for q in qa + qb:
+        check_question(q)
+    log("正解の位置:", " ".join(f"{q['id']}={q['correct']}" for q in qa + qb))
+    plan = {
+        "format": "fe-daily-plan-v1", "date": DATE, "planId": "plan-20261114-v1", "examDate": "2026-11-23",
+        "author": "GPTの計画に沿ってClaudeが作問・検算",
+        "goal": "科目A・科目Bとも、制限時間内に全問を一度見る。前回の論点（外部結合と集計、SLAの停止時間、配列の折返し、キュー）を新しい題材で自力で追えるかを確認する。",
+        "note": "前回の復習は、同じ問題ではなく新しい題材の類題で確認します。2つのセットは別々の空き時間に受験できます。解説・復習の時間は受験時間に含みません。",
+        "sets": [
+            {
+                "setId": "daily-20261114-A01", "subject": "A", "title": "科目A 5問セット",
+                "goal": "5問すべてを制限時間内に一度見る。計算問題で手順が立たないときは保留して先へ進み、残り時間で保留に戻る。",
+                "advice": "計算問題で1分ほど考えても式や手順が立たなければ、いったん保留して次へ。5問目まで見たら、残り時間で保留に戻る。",
+                "detail": "データベース・システム構成・会計・サービスマネジメント・情報セキュリティの各1問（新作。前回の論点の類題を含む）。",
+                "limitSec": 450, "limitNote": "科目A本番の平均 90分÷60問＝1問90秒 × 5問",
+                "questions": qa,
+            },
+            {
+                "setId": "daily-20261114-B01", "subject": "B", "title": "科目B 2問セット",
+                "goal": "2問とも解く時間を確保する。ループの回数と実際の添字の対応、キューに出し入れする値を、途中の状態を書きながら追う。",
+                "advice": "残り5分で問1の答えが出ていなければ、保留して問2へ。問2を解き終えたら保留に戻る。",
+                "detail": "アルゴリズムとプログラミングの2問（新作。前回の論点の類題）。",
+                "limitSec": 600, "limitNote": "科目B本番の平均 100分÷20問＝1問300秒 × 2問",
+                "questions": qb,
+            },
+        ],
+    }
+    os.makedirs(os.path.dirname(OUT_JSON), exist_ok=True)
+    with open(OUT_JSON, "w", encoding="utf-8") as f:
+        json.dump(plan, f, ensure_ascii=False, indent=1)
+        f.write("\n")
+    os.makedirs(OUT_DIR, exist_ok=True)
+    with open(os.path.join(OUT_DIR, DATE.replace("-", "") + "_check.log"), "w", encoding="utf-8") as f:
+        f.write("\n".join(LOG) + "\n")
+    write_manuscript(plan)
+    print("\n".join(LOG))
+
+
+if __name__ == "__main__":
+    main()

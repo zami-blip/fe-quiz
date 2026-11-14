@@ -60,7 +60,7 @@ const now = page => page.evaluate(() => Date.now());
     ok(await page.getByText(plan.goal).first().isVisible(), `${name}: 今日の目標を表示`);
     ok((await page.locator(".m2-pill").allTextContents()).join(",") === "未受験,未受験", `${name}: 2セットとも未受験`);
     ok(await page.getByText("5問・制限時間 7分30秒").isVisible() && await page.getByText("2問・制限時間 10分").isVisible(), `${name}: 問題数と制限時間`);
-    ok(await page.getByRole("tab", { name: /11\/14未作成/ }).isVisible(), `${name}: 翌日の課題は未作成と表示`);
+    ok(await page.getByRole("tab", { name: /11\/14未受験/ }).isVisible(), `${name}: 翌日（作成済み）の課題を未受験と表示`);
     await page.screenshot({ path: `${OUT}/${name}_01_day.png`, fullPage: true });
 
     // ---- 科目A：開始前の画面 → 開始
@@ -227,10 +227,10 @@ const now = page => page.evaluate(() => Date.now());
     await page.goto(BASE + "/");
     ok(await page.getByRole("link", { name: "今日の学習 →" }).isVisible(), `${name}: 通常学習画面に「今日の学習」の導線`);
     // 過去の日付として開ける（翌日に開いた想定）
-    await page.clock.setSystemTime(Date.parse("2026-11-14T08:00:00+09:00"));
+    await page.clock.setSystemTime(Date.parse("2026-11-16T08:00:00+09:00"));
     await page.goto(BASE + "/daily");
     await page.getByRole("heading", { name: "今日の学習" }).waitFor();
-    ok(await page.getByText("この日の課題は作成されていません").isVisible(), `${name}: 翌日に開くと今日（11/14）は未作成`);
+    ok(await page.getByText("この日の課題は作成されていません").isVisible(), `${name}: 課題のない日（11/16）に開くと未作成`);
     await page.getByRole("tab", { name: /11\/13/ }).click();
     ok(await page.getByText("（過去の課題）").isVisible() && (await page.locator(".m2-pill").allTextContents()).join(",") === "完了,完了", `${name}: 過去の課題と結果を開ける`);
     ok(errors.length === 0, `${name}: コンソールエラーなし ${errors.join(" / ")}`);

@@ -149,3 +149,25 @@ test("日本時間の日付", () => {
   expect(jstDate(Date.parse("2026-11-12T14:59:59Z"))).toBe("2026-11-12");
   expect(addDays("2026-11-30", 1)).toBe("2026-12-01");
 });
+
+test("11/14の計画：A5問450秒・B2問600秒、固有ID、元設問の参照、進め方、全日付でIDが重ならない", () => {
+  const p = planOf("2026-11-14");
+  const [a, b] = p.sets;
+  expect(a.setId).toBe("daily-20261114-A01"); expect(a.limitSec).toBe(450); expect(a.questions).toHaveLength(5);
+  expect(b.setId).toBe("daily-20261114-B01"); expect(b.limitSec).toBe(600); expect(b.questions).toHaveLength(2);
+  expect(a.advice).toMatch("1分"); expect(b.advice).toMatch("残り5分");
+  const all = PLANS.flatMap(x => x.sets.flatMap(s => s.questions));
+  expect(new Set(all.map(q => q.id)).size).toBe(all.length);
+  const ids13 = new Set(planOf("2026-11-13").sets.flatMap(s => s.questions.map(q => q.id)));
+  const refs = Object.fromEntries([...a.questions, ...b.questions].map(q => [q.id, q.review_of || q.related_to || null]));
+  expect(refs).toEqual({ D1114A01: "D1113A02", D1114A02: null, D1114A03: "D1113A05", D1114A04: "D1113A04", D1114A05: null, D1114B01: "D1113B01", D1114B02: "D1113B02" });
+  Object.values(refs).filter(Boolean).forEach(r => expect(ids13.has(r)).toBe(true));
+  [...a.questions, ...b.questions].forEach(q => {
+    expect(q.choices.map(c => c.label)).toContain(q.correct);
+    q.choices.forEach((c, i) => expect(c.cols || c.text).toEqual(q.verify[i].value));
+    expect(q.verify.filter(v => v.reason === "正解").map(v => v.label)).toEqual([q.correct]);
+    expect(q.explanation).toMatch(/〔検算〕/);
+    expect(q.explain && q.explain.some(t => t.t === "table")).toBe(true);
+  });
+  b.questions.forEach(q => expect(q.body[0].text).not.toMatch(/再帰|キュー問題|return ?の確認|折返し/));
+});

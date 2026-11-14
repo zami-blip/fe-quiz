@@ -274,6 +274,7 @@ export default function AppDaily() {
           <h1>{set.title}{no > 1 ? `（${no}回目・再受験）` : ""}</h1>
           <div className="m2-card">
             <div className="dl-goal"><b>目標</b>　{set.goal}</div>
+            {set.advice && <div className="dl-goal"><b>進め方</b>　{set.advice}</div>}
             <p style={{ margin: "6px 0" }}>{set.questions.length}問・制限時間 <b>{limitText(set.limitSec)}</b></p>
             <p className="m2-muted" style={{ margin: 0 }}>制限時間は {set.limitNote}。セット全体の時間配分の目安で、1問ごとの合格ラインではありません。</p>
           </div>
