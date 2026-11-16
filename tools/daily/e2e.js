@@ -51,8 +51,8 @@ const now = page => page.evaluate(() => Date.now());
     await page.goto(BASE + "/daily");
     await page.evaluate(r3 => { localStorage.clear(); localStorage.setItem("fe_mock_r3_results", r3); localStorage.setItem("fe_alog_v1", "[\"keep\"]"); }, R3);
     await page.reload();
-    await page.clock.pauseAt(await now(page) + 10);
-    await page.clock.runFor(10);
+    await page.clock.pauseAt(await now(page) + 1000);
+    await page.clock.runFor(1000);
 
     // ---- 日ごとの画面
     await page.getByRole("heading", { name: "今日の学習" }).waitFor();
@@ -227,10 +227,10 @@ const now = page => page.evaluate(() => Date.now());
     await page.goto(BASE + "/");
     ok(await page.getByRole("link", { name: "今日の学習 →" }).isVisible(), `${name}: 通常学習画面に「今日の学習」の導線`);
     // 過去の日付として開ける（翌日に開いた想定）
-    await page.clock.setSystemTime(Date.parse("2026-11-16T08:00:00+09:00"));
+    await page.clock.setSystemTime(Date.parse("2026-12-31T08:00:00+09:00"));
     await page.goto(BASE + "/daily");
     await page.getByRole("heading", { name: "今日の学習" }).waitFor();
-    ok(await page.getByText("この日の課題は作成されていません").isVisible(), `${name}: 課題のない日（11/16）に開くと未作成`);
+    ok(await page.getByText("この日の課題は作成されていません").isVisible(), `${name}: 課題のない日（12/31）に開くと未作成`);
     await page.getByRole("tab", { name: /11\/13/ }).click();
     ok(await page.getByText("（過去の課題）").isVisible() && (await page.locator(".m2-pill").allTextContents()).join(",") === "完了,完了", `${name}: 過去の課題と結果を開ける`);
     ok(errors.length === 0, `${name}: コンソールエラーなし ${errors.join(" / ")}`);

@@ -171,3 +171,32 @@ test("11/14の計画：A5問450秒・B2問600秒、固有ID、元設問の参照
   });
   b.questions.forEach(q => expect(q.body[0].text).not.toMatch(/再帰|キュー問題|return ?の確認|折返し/));
 });
+
+describe.each([
+  ["2026-11-15", { D1115A01: "D1114A02", D1115A02: "D1114A05", D1115A03: "D1114A03", D1115A04: "D1114A04", D1115A05: "D1114A01", D1115B01: "D1114B02", D1115B02: "D1114B01" }],
+  ["2026-11-16", { D1116A01: "D1115A01", D1116A02: "D1115A02", D1116A03: "D1115A04", D1116A04: "D1115A03", D1116A05: null, D1116B01: "D1115B01", D1116B02: "D1115B02" }],
+])("%s の計画", (date, refs) => {
+  const p = planOf(date);
+  const ymd = date.replace(/-/g, "");
+  test("A5問450秒・B2問600秒、セットID、固有ID、元設問の参照、短問2問・A想定合計6分程度、検算値の一致", () => {
+    const [a, b] = p.sets;
+    expect(a.setId).toBe(`daily-${ymd}-A01`); expect(a.limitSec).toBe(450); expect(a.questions).toHaveLength(5);
+    expect(b.setId).toBe(`daily-${ymd}-B01`); expect(b.limitSec).toBe(600); expect(b.questions).toHaveLength(2);
+    const qs = [...a.questions, ...b.questions];
+    const all = PLANS.flatMap(x => x.sets.flatMap(s => s.questions));
+    expect(new Set(all.map(q => q.id)).size).toBe(all.length);
+    const ids = new Set(all.map(q => q.id));
+    expect(Object.fromEntries(qs.map(q => [q.id, q.review_of || q.related_to || null]))).toEqual(refs);
+    Object.values(refs).filter(Boolean).forEach(r => expect(ids.has(r)).toBe(true));
+    const sum = a.questions.reduce((s, q) => s + q.expected_seconds, 0);
+    expect(sum).toBeGreaterThanOrEqual(330); expect(sum).toBeLessThanOrEqual(390);
+    expect(a.questions.filter(q => q.expected_seconds >= 30 && q.expected_seconds <= 45)).toHaveLength(2);
+    qs.forEach(q => {
+      expect(q.choices.map(c => c.label)).toContain(q.correct);
+      q.choices.forEach((c, i) => expect(c.cols || c.text).toEqual(q.verify[i].value));
+      expect(q.verify.filter(v => v.reason === "正解").map(v => v.label)).toEqual([q.correct]);
+      expect(q.explanation).toMatch(/〔検算〕/);
+      expect(q.explain && q.explain.some(t => t.t === "table")).toBe(true);
+    });
+  });
+});

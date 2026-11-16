@@ -2,8 +2,10 @@
 // 計画は GPT が決め、問題・解説・検算は Claude が作って tools/daily/ の生成スクリプトで出力する。
 import p20261113 from "./data/2026-11-13.json";
 import p20261114 from "./data/2026-11-14.json";
+import p20261115 from "./data/2026-11-15.json";
+import p20261116 from "./data/2026-11-16.json";
 
-export const PLANS = [p20261113, p20261114].sort((x, y) => (x.date < y.date ? -1 : 1));
+export const PLANS = [p20261113, p20261114, p20261115, p20261116].sort((x, y) => (x.date < y.date ? -1 : 1));
 
 export function planOf(date) { return PLANS.find(p => p.date === date) || null; }
 export function findSet(setId) {
